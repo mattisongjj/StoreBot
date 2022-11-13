@@ -3,6 +3,7 @@ from telebot.util import quick_markup
 from telebot import types
 import sqlite3
 from sqlite3 import Error
+import re
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -27,19 +28,19 @@ def index(message):
         # Check for existing store
         cursor.execute("SELECT * FROM stores WHERE id = ?", (message.chat.id,))
         rows = cursor.fetchall()
-        # Store does not exist
         if len(rows) != 1:
             bot.send_message(message.chat.id, 'This group currently does not have a store. Enter /create_store to initialize store.')
-        # Store exist
+            return
+        # Show Options
         else:
-            msg = bot.send_message(message.chat.id, 'Choose an option', reply_markup= quick_markup({
+            bot.send_message(message.chat.id, 'Choose an option', reply_markup= quick_markup({
                 'View Current Stock': {'callback_data': 'View Current Stock'},
                 'Increase Stock': {'callback_data': 'Increase Stock'},
                 'Decrease Stock': {'callback_data': 'Decrease Stock'},
                 'Add New Item': {'callback_data': 'Add New Item'},
                 'Add Transaction': {'callback_data': 'Add Transaction'},
-                'View Transaction History': {'callback_data': 'View Transaction History'}
-            }, row_width=1))
+                'View Transaction History': {'callback_data': 'View Transaction History'}},
+                row_width=1))
 
 
     # Bot was started in a private chat
@@ -56,10 +57,50 @@ def index(message):
 
 
 
+# Handles viewing of stock
+@bot.callback_query_handler(func=lambda call: call.data == 'View Current Stock')
+def view_stock(call):
+    # Query database for items
+    cursor.execute('SELECT ItemName FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
+    items = cursor.fetchall()
+    if len(items) == 0:
+        bot.send_message(call.message.chat.id, 'Store does not have any items.')
+        return
+    # Display options
+    options = {'View Full Stock': {'callback_data': 'View Full Stock'}}
+    for item in items:
+        options[item[0]] = {'callback_data': f'(view) {item[0]}'}
+    bot.send_message(call.message.chat.id, 'What would you like to view?', reply_markup=quick_markup(options, row_width=1))
+
+@bot.callback_query_handler(func=lambda call: '(view)' == call.data.split()[0])
+def view_item(call):
+    # Query database
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND ItemName = ?', (call.message.chat.id, re.sub('(\(view\) )', '', call.data)))
+    item = cursor.fetchone()
+    bot.send_message(call.message.chat.id, f'No. of {item[0]} in store: {item[1]}')
+
+@bot.callback_query_handler(func=lambda call: call.data == 'View Full Stock')
+def full_stock(call):
+    # Query database for items
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
+    items = cursor.fetchall()
+    reply = 'Total Stock:\n'
+    for item in items:
+        reply = reply + f'{item[0]} x{item[1]}\n'
+    bot.send_message(call.message.chat.id, reply)
+    
+
+    
+
+
+
+
+
+
 
 # Handles adding of stock
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Item')
-def options(call):
+def new_item(call):
     msg = bot.send_message(call.message.chat.id, 'Name of new item?\n(Reply to this message)')
     bot.register_next_step_handler(msg, get_total)
 
