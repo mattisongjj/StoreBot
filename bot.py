@@ -16,6 +16,12 @@ except Error as e:
     print(f"Error '{e}' occured when establishing connection to database")
 cursor = db.cursor()
 
+i_item = ()
+
+n_item = ''
+
+
+
 
 # Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
@@ -35,9 +41,13 @@ def index(message):
         else:
             bot.send_message(message.chat.id, 'Choose an option', reply_markup= quick_markup({
                 'View Current Stock': {'callback_data': 'View Current Stock'},
+
+                ###
                 'Increase Stock': {'callback_data': 'Increase Stock'},
                 'Decrease Stock': {'callback_data': 'Decrease Stock'},
                 'Add New Item': {'callback_data': 'Add New Item'},
+                ###
+
                 'Add Transaction': {'callback_data': 'Add Transaction'},
                 'View Transaction History': {'callback_data': 'View Transaction History'}},
                 row_width=1))
@@ -104,7 +114,6 @@ def new_item(call):
     msg = bot.send_message(call.message.chat.id, 'Name of new item?\n(Reply to this message)')
     bot.register_next_step_handler(msg, get_total)
 
-item = ''
 def get_total(message):
     # Ensure message is text
     if not message.text:
@@ -114,8 +123,8 @@ def get_total(message):
     if len(cursor.fetchall()) != 0:
         bot.reply_to(message, 'Item already exist in store.')
     # Remember item name
-    global item 
-    item = message.text
+    global n_item 
+    n_item = message.text
     # Get quantity
     msg = bot.reply_to(message,'Quantity of item?', reply_markup=types.ForceReply(True, 'Quantity of item'))
     bot.register_next_step_handler(msg, add_item)
@@ -124,14 +133,81 @@ def add_item(message):
     # Validate quantity
     try:
         int(message.text)
+        if int(message.text) <= 0:
+            bot.send_message(message.chat.id, 'Invalid Quantity')
     except:
         bot.send_message(message.chat.id, 'Invalid Quantity')
 
     # Add item to database
-    global item
-    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, item, int(message.text)))
+    global n_item
+    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, n_item, int(message.text)))
     db.commit()
-    bot.send_message(message.chat.id, f'x{message.text} {item} has been created and added to stock.')
+    bot.send_message(message.chat.id, f'x{message.text} {n_item} has been created and added to stock.')
+
+
+
+
+
+
+
+@bot.callback_query_handler(func= lambda call: call.data == 'Increase Stock')
+def increase_stock(call):
+    # Query for item to be increased
+    cursor.execute('SELECT ItemName FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
+    rows = cursor.fetchall()
+
+    # Create markup
+    options = {}
+    for row in rows:
+        options[row[0]] = {'callback_data': f'(inc) {row[0]}'}
+
+    bot.send_message(call.message.chat.id, 'Select item to be increased.', reply_markup=quick_markup(options, row_width=1))
+
+@bot.callback_query_handler(func=lambda call:  '(inc)' == call.data.split()[0])
+def increase_quantity(call):
+    # Get current quantity
+    cursor.execute('SELECT Itemname, Quantity FROM stocks WHERE store_id = ? and ItemName = ?', (call.message.chat.id, re.sub('(\(inc\) )', '', call.data)))
+    item = cursor.fetchone()
+    bot.send_message(call.message.chat.id, f'Current stock of {item[0]}: {item[1]}')
+    # Update global
+    global i_item
+    i_item = item
+    # Get quantity to be increased
+    msg = bot.send_message(call.message.chat.id, 'Quantity to be increased? (Reply this message)')
+    bot.register_next_step_handler(msg, increase_update)
+
+
+def increase_update(message):
+    # Update database
+    global i_item
+    try:
+        cursor.execute('UPDATE stocks SET Quantity = ? WHERE ItemName = ?', (i_item[1] + int(message.text), i_item[0]))
+        db.commit()
+    except:
+        bot.reply_to(message, 'Invalid Quantity')
+        return
+    bot.send_message(message.chat.id, f'Quantity of {i_item[0]} has been increased from {i_item[1]} to {i_item[1] + int(message.text)}.')
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+@bot.callback_query_handler(func= lambda call: call.data == 'Decrease Stock')
+def decrease_stock(call):
+    # Query for item to be decreased
+    # Get quantity
+    # Get reason
+    # Update database
+    pass
 
 
 
