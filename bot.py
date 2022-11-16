@@ -16,11 +16,7 @@ except Error as e:
     print(f"Error '{e}' occured when establishing connection to database")
 cursor = db.cursor()
 
-i_item = ()
-
 n_item = ''
-
-
 
 
 # Handle /start and /help commands
@@ -39,16 +35,10 @@ def index(message):
             return
         # Show Options
         else:
-            bot.send_message(message.chat.id, 'Choose an option', reply_markup= quick_markup({
+            bot.send_message(message.chat.id, 'Choose an option', reply_markup=quick_markup({
                 'View Current Stock': {'callback_data': 'View Current Stock'},
-
-                ###
-                'Increase Stock': {'callback_data': 'Increase Stock'},
-                'Decrease Stock': {'callback_data': 'Decrease Stock'},
                 'Add New Item': {'callback_data': 'Add New Item'},
-                ###
-
-                'Add Transaction': {'callback_data': 'Add Transaction'},
+                'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'}},
                 row_width=1))
 
@@ -108,7 +98,7 @@ def full_stock(call):
 
 
 
-# Handles adding of stock
+# Handles creation of new item
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Item')
 def new_item(call):
     msg = bot.send_message(call.message.chat.id, 'Name of new item?\n(Reply to this message)')
@@ -147,68 +137,28 @@ def add_item(message):
 
 
 
-
-
-
-@bot.callback_query_handler(func= lambda call: call.data == 'Increase Stock')
-def increase_stock(call):
-    # Query for item to be increased
-    cursor.execute('SELECT ItemName FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
-    rows = cursor.fetchall()
-
-    # Create markup
-    options = {}
-    for row in rows:
-        options[row[0]] = {'callback_data': f'(inc) {row[0]}'}
-
-    bot.send_message(call.message.chat.id, 'Select item to be increased.', reply_markup=quick_markup(options, row_width=1))
-
-@bot.callback_query_handler(func=lambda call:  '(inc)' == call.data.split()[0])
-def increase_quantity(call):
-    # Get current quantity
-    cursor.execute('SELECT Itemname, Quantity FROM stocks WHERE store_id = ? and ItemName = ?', (call.message.chat.id, re.sub('(\(inc\) )', '', call.data)))
-    item = cursor.fetchone()
-    bot.send_message(call.message.chat.id, f'Current stock of {item[0]}: {item[1]}')
-    # Update global
-    global i_item
-    i_item = item
-    # Get quantity to be increased
-    msg = bot.send_message(call.message.chat.id, 'Quantity to be increased? (Reply this message)')
-    bot.register_next_step_handler(msg, increase_update)
-
-
-def increase_update(message):
-    # Update database
-    global i_item
-    try:
-        cursor.execute('UPDATE stocks SET Quantity = ? WHERE ItemName = ?', (i_item[1] + int(message.text), i_item[0]))
-        db.commit()
-    except:
-        bot.reply_to(message, 'Invalid Quantity')
-        return
-    bot.send_message(message.chat.id, f'Quantity of {i_item[0]} has been increased from {i_item[1]} to {i_item[1] + int(message.text)}.')
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-@bot.callback_query_handler(func= lambda call: call.data == 'Decrease Stock')
-def decrease_stock(call):
-    # Query for item to be decreased
-    # Get quantity
-    # Get reason
-    # Update database
+# Handles quantity adjustment/new transactions
+@bot.callback_query_handler(func=lambda call: call.data == 'Adjust Qty')
+def choose_type(call):
+    # Create transaction types markup
+    markup = quick_markup({
+                'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
+                'Issue': {'callback_data': 'Issue'},
+                'Loan': {'callback_data': 'Loan'}},
+                row_width=1)
+    # Get additional transaction types from store
     pass
 
+    
+    # Display transaction types
+    bot.delete_message(call.message.chat.id, call.message.id)
+    bot.send_message(call.message.chat.id, 'Select Reason For Adjustment/Transaction Type.', reply_markup=markup)
+
+
+# Handles creation of new transaction type
+@bot.callback_query_handler(func=lambda call: call.data == 'Add New Transaction Type')
+def new_type(call):
+    pass
 
 
 
