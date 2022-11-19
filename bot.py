@@ -19,6 +19,16 @@ cursor = db.cursor()
 n_item = ''
 
 
+
+
+def isadmin(chat, user):
+    # Check if user is admin in chat
+    member = bot.get_chat_member(chat.id, user.id)
+    if member.status not in ['creator', 'administrator']:
+        bot.send_message(chat.id, 'Sorry you are not an administrator of this chat.')
+        return False
+    return True
+
 # Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
 def index(message):
@@ -60,6 +70,9 @@ def index(message):
 # Handles viewing of stock
 @bot.callback_query_handler(func=lambda call: call.data == 'View Current Stock')
 def view_stock(call):
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
     # Query database for items
     cursor.execute('SELECT ItemName FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
@@ -151,6 +164,7 @@ def choose_type(call):
     # Add default types
     types = {
         'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
+        'Remove Transaction Type': {'callback_data': 'Remove Transaction Type'},
         'Issue': {'callback_data': 'Issue'},
         'Loan': {'callback_data': 'Loan'}
         }
@@ -172,6 +186,9 @@ def choose_type(call):
 # Handles creation of new transaction type
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Transaction Type')
 def new_type(call):
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
     # Get type name
     bot.delete_message(call.message.chat.id, call.message.id)
     msg = bot.send_message(call.message.chat.id, 'Name of new transaction type?\n (Reply this message)')
@@ -190,6 +207,28 @@ def add_type(message):
     bot.reply_to(message, 'New type successfully added.')
 
 
+# Handles removal of transaction type
+@bot.callback_query_handler(func=lambda call: call.data == 'Remove Transaction Type')
+def remove_type(call):
+
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
+
+    # Get transaction types
+    cursor.execute('SELECT type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
+    types = cursor.fetchall()
+    # Create markup
+    markup = {}
+    for type in types:
+        markup[type[0]] = {'callback_data': f'(del) {type[0]}'} 
+    
+    print(markup)
+
+    # Query for type to be removed
+    bot.send_message(call.message.chat.id, 'Select Transaction Type to be removed.', reply_markup=quick_markup(markup,row_width=1))
 
 
 
@@ -214,14 +253,12 @@ def create_store(message):
         return
     
     # Ensure User is creator or adminstrator of chat
-    user = bot.get_chat_member(message.chat.id, message.from_user.id)
-    if user.status in ['creator', 'administrator']:
-
-        # Prompt user for store name
-        msg = bot.reply_to(message,'What would you like to name your store?', reply_markup=types.ForceReply(True, 'Store Name'))
-        bot.register_next_step_handler(msg, created_store)
-    else:
-        bot.reply_to(message, 'You must be owner or administrator of this group to run this command')
+    if not isadmin(message.chat, message.from_user):
+        return
+    
+    # Prompt user for store name
+    msg = bot.reply_to(message,'What would you like to name your store?', reply_markup=types.ForceReply(True, 'Store Name'))
+    bot.register_next_step_handler(msg, created_store)
 
 def created_store(message):
     # Ensure store name is a string
