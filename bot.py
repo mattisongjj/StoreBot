@@ -137,19 +137,33 @@ def add_item(message):
 
 
 
+
+
+
+
+
+
+
 # Handles quantity adjustment/new transactions
 @bot.callback_query_handler(func=lambda call: call.data == 'Adjust Qty')
 def choose_type(call):
-    # Create transaction types markup
-    markup = quick_markup({
-                'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
-                'Issue': {'callback_data': 'Issue'},
-                'Loan': {'callback_data': 'Loan'}},
-                row_width=1)
-    # Get additional transaction types from store
-    pass
 
+    # Add default types
+    types = {
+        'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
+        'Issue': {'callback_data': 'Issue'},
+        'Loan': {'callback_data': 'Loan'}
+        }
     
+    # Get additional transaction types from store
+    cursor.execute('SELECT type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
+    rows = cursor.fetchall()
+    for row in rows:
+        types[row[0]] = {'callback_data': f'{row[0]}'}
+
+    # Create transaction types markup
+    markup = quick_markup(types, row_width=1)
+
     # Display transaction types
     bot.delete_message(call.message.chat.id, call.message.id)
     bot.send_message(call.message.chat.id, 'Select Reason For Adjustment/Transaction Type.', reply_markup=markup)
@@ -158,10 +172,22 @@ def choose_type(call):
 # Handles creation of new transaction type
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Transaction Type')
 def new_type(call):
-    pass
+    # Get type name
+    bot.delete_message(call.message.chat.id, call.message.id)
+    msg = bot.send_message(call.message.chat.id, 'Name of new transaction type?\n (Reply this message)')
+    bot.register_next_step_handler(msg, add_type)
 
-
-
+def add_type(message):
+    type = message.text
+    # Validate type
+    cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ?', (message.chat.id, type))
+    if len(cursor.fetchall()) != 0 or not type:
+        bot.reply_to(message, 'Invalid type name.')
+        return
+    # Add type to database
+    cursor.execute('INSERT INTO transaction_types (store_id, type) VALUES (?, ?)', (message.chat.id, type))
+    db.commit()
+    bot.reply_to(message, 'New type successfully added.')
 
 
 
