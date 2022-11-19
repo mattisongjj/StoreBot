@@ -29,6 +29,11 @@ def isadmin(chat, user):
         return False
     return True
 
+
+
+
+
+
 # Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
 def index(message):
@@ -67,9 +72,12 @@ def index(message):
 
 
 
+
+
 # Handles viewing of stock
 @bot.callback_query_handler(func=lambda call: call.data == 'View Current Stock')
 def view_stock(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
     # Ensure user is admin
     if not isadmin(call.message.chat, call.from_user):
         return
@@ -87,6 +95,7 @@ def view_stock(call):
 
 @bot.callback_query_handler(func=lambda call: '(view)' == call.data.split()[0])
 def view_item(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
     # Query database
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND ItemName = ?', (call.message.chat.id, re.sub('(\(view\) )', '', call.data)))
     item = cursor.fetchone()
@@ -94,6 +103,7 @@ def view_item(call):
 
 @bot.callback_query_handler(func=lambda call: call.data == 'View Full Stock')
 def full_stock(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
     # Query database for items
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
@@ -114,6 +124,7 @@ def full_stock(call):
 # Handles creation of new item
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Item')
 def new_item(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
     msg = bot.send_message(call.message.chat.id, 'Name of new item?\n(Reply to this message)')
     bot.register_next_step_handler(msg, get_total)
 
@@ -146,8 +157,6 @@ def add_item(message):
     cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, n_item, int(message.text)))
     db.commit()
     bot.send_message(message.chat.id, f'x{message.text} {n_item} has been created and added to stock.')
-
-
 
 
 
@@ -220,15 +229,29 @@ def remove_type(call):
     # Get transaction types
     cursor.execute('SELECT type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
     types = cursor.fetchall()
+
+    # Ensure that created types exist
+    if len(types) == 0:
+        bot.send_message(call.message.chat.id, "There are currently no transaction types to be removed.\n Note: 'Issue' and 'Loan' cannot be removed.")
+        return
+
     # Create markup
     markup = {}
     for type in types:
         markup[type[0]] = {'callback_data': f'(del) {type[0]}'} 
-    
-    print(markup)
 
     # Query for type to be removed
     bot.send_message(call.message.chat.id, 'Select Transaction Type to be removed.', reply_markup=quick_markup(markup,row_width=1))
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(del)')
+def remove_type_db(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Update database
+    cursor.execute('DELETE FROM transaction_types WHERE store_id = ? AND type = ?', (call.message.chat.id, re.sub('(\(del\)) ', '', call.data)))
+    db.commit()
+    bot.send_message(call.message.chat.id, 'Transaction type succesfully deleted')
+
 
 
 
