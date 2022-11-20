@@ -1,24 +1,13 @@
-def sum_for_list(lst):
-    highest = abs(sorted(lst, key=lambda n: abs(n), reverse=True)[0])
-    primes = get_primes(highest)
-    output = []
-    for prime_number in primes:
-        factor_of = []
-        for number in lst:
-            if number % prime_number == 0:
-                factor_of.append(number)
-        if len(factor_of) != 0:
-            output.append([prime_number, sum(factor_of)])
-    return output
-
-def get_primes(number):
-    primes = []
-    if number >= 2:
-        primes.append(2)
-    for i in range(2, number + 1):
-        for j in range(2, i):
-            if i % j == 0:
-                break
-            if j == i - 1:
-                primes.append(i)
-    return primes
+class Transaction:
+    def __init__(self, store_id=None, id=None, type=None, operator=None, customer=None, items=None, loan_id=None, old_qty=None, change=None, new_qty=None, datetime=None):
+        self.store_id = store_id
+        self.id = id
+        self.type = type
+        self.operator = operator
+        self.customer = customer
+        self.items = items
+        self.loan_id = loan_id
+        self.old_qty = old_qty
+        self.change = change
+        self.new_qty = new_qty
+        self.datetime = datetime

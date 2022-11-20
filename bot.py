@@ -18,7 +18,19 @@ cursor = db.cursor()
 
 n_item = ''
 
-
+class Transaction:
+    def __init__(self, store_id=None, id=None, type=None, operator=None, customer=None, items=None, loan_id=None, old_qty=None, change=None, new_qty=None, datetime=None):
+        self.store_id = store_id
+        self.id = id
+        self.type = type
+        self.operator = operator
+        self.customer = customer
+        self.items = items
+        self.loan_id = loan_id
+        self.old_qty = old_qty
+        self.change = change
+        self.new_qty = new_qty
+        self.datetime = datetime
 
 
 def isadmin(chat, user):
@@ -28,11 +40,6 @@ def isadmin(chat, user):
         bot.send_message(chat.id, 'Sorry you are not an administrator of this chat.')
         return False
     return True
-
-
-
-
-
 
 # Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
@@ -174,15 +181,15 @@ def choose_type(call):
     types = {
         'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
         'Remove Transaction Type': {'callback_data': 'Remove Transaction Type'},
-        'Issue': {'callback_data': 'Issue'},
-        'Loan': {'callback_data': 'Loan'}
+        'Issue': {'callback_data': '(trans_type) Issue'},
+        'Loan': {'callback_data': '(trans_type) Loan'}
         }
     
     # Get additional transaction types from store
     cursor.execute('SELECT type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
     rows = cursor.fetchall()
     for row in rows:
-        types[row[0]] = {'callback_data': f'{row[0]}'}
+        types[row[0]] = {'callback_data': f'(trans_type) {row[0]}'}
 
     # Create transaction types markup
     markup = quick_markup(types, row_width=1)
@@ -190,6 +197,9 @@ def choose_type(call):
     # Display transaction types
     bot.delete_message(call.message.chat.id, call.message.id)
     bot.send_message(call.message.chat.id, 'Select Reason For Adjustment/Transaction Type.', reply_markup=markup)
+
+
+
 
 
 # Handles creation of new transaction type
@@ -214,6 +224,9 @@ def add_type(message):
     cursor.execute('INSERT INTO transaction_types (store_id, type) VALUES (?, ?)', (message.chat.id, type))
     db.commit()
     bot.reply_to(message, 'New type successfully added.')
+
+
+
 
 
 # Handles removal of transaction type
@@ -251,6 +264,44 @@ def remove_type_db(call):
     cursor.execute('DELETE FROM transaction_types WHERE store_id = ? AND type = ?', (call.message.chat.id, re.sub('(\(del\)) ', '', call.data)))
     db.commit()
     bot.send_message(call.message.chat.id, 'Transaction type succesfully deleted')
+
+
+
+
+# Handles issue/loan transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(trans_type)')
+def open_new_transaction(call):
+
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Start a new transaction
+    transaction = Transaction(store_id=call.message.chat.id ,type=re.sub('(\(trans_type\) )', '', call.data))
+
+    # Get items in store
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    items = cursor.fetchall()
+
+    # Ensure at least one item
+    if len(items) == 0:
+        bot.send_message(call.message.chat.id, 'There are no items in currently in this store.')
+
+    # Create markup
+    markup = {}
+    for item in items:
+        markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(trans_item) {item[0]}' }
+
+    # Query for item
+    bot.send_message(call.message.chat.id, 'Select item involved in transaction', reply_markup=quick_markup(markup, row_width=1))
+
+
+
+
+
+
+
+
+
+
 
 
 
