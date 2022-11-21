@@ -4,6 +4,7 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import re
+from transactions import Transaction, toTransaction
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -17,20 +18,6 @@ except Error as e:
 cursor = db.cursor()
 
 n_item = ''
-
-class Transaction:
-    def __init__(self, store_id=None, id=None, type=None, operator=None, customer=None, items=None, loan_id=None, old_qty=None, change=None, new_qty=None, datetime=None):
-        self.store_id = store_id
-        self.id = id
-        self.type = type
-        self.operator = operator
-        self.customer = customer
-        self.items = items
-        self.loan_id = loan_id
-        self.old_qty = old_qty
-        self.change = change
-        self.new_qty = new_qty
-        self.datetime = datetime
 
 
 def isadmin(chat, user):
@@ -275,7 +262,7 @@ def open_new_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Start a new transaction
-    transaction = Transaction(store_id=call.message.chat.id ,type=re.sub('(\(trans_type\) )', '', call.data))
+    
 
     # Get items in store
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
