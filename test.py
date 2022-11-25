@@ -1,14 +1,5 @@
-def solution(args):
-    # Sort list
-    args = sorted(args)
+import json
 
-    # Iterate over every number in list
-    beg = end = 0
-    i = 1
+aString = '["a", "b", "1", "c"]'
 
-    output = []
-
-    while args[end] + 1 == args[i]:
-        end 
-
-
+print(''.join(json.loads(aString)))

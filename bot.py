@@ -4,6 +4,7 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import re
+import json
 from transactions import Transaction, insertTransaction
 
 # Set API key
@@ -141,15 +142,17 @@ def get_total(message):
 def add_item(message):
     # Validate quantity
     try:
-        int(message.text)
-        if int(message.text) <= 0:
-            bot.send_message(message.chat.id, 'Invalid Quantity')
+        qty = int(message.text)
+        if qty <= 0:
+            bot.reply_to(message, 'Invalid Quantity')
+            return
     except:
-        bot.send_message(message.chat.id, 'Invalid Quantity')
+        bot.reply_to(message, 'Invalid Quantity')
+        return
 
     # Add item to database
     global n_item
-    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, n_item, int(message.text)))
+    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, n_item, qty))
     db.commit()
     bot.send_message(message.chat.id, f'x{message.text} {n_item} has been created and added to stock. Enter /start to add another item.')
 
@@ -294,18 +297,58 @@ def add_item_to_transaction(call):
     # Get transaction id
     id = int(call.data.split()[1])
 
-    # Get item
+    # Get current transaction data
+    cursor.execute('SELECT items, old_qty FROM transactions WHERE transaction_id = ?', (id,))
+    data = cursor.fetchone()
+    items = json.loads(data[0])
+    old_qty = json.loads(data[1])
+    
+    # Get item to add
     item = re.sub(f'(\(add_item\) {id} )', '', call.data)
 
+    # Get current quantity of item
+    cursor.execute('SELECT Quantity FROM stocks WHERE store_id = ? AND ItemName = ?', (call.message.chat.id, item))
+    current_qty = cursor.fetchone()[0]
+
+    # Get new data
+    old_qty.append(current_qty)
+    items.append(re.sub(f'(\(add_item\) {id} )', '', call.data))
+
     # Update db
-    cursor.execute('UPDATE transactions SET Item = ? WHERE transaction_id = ?', (item, id))
+    cursor.execute('UPDATE transactions SET items = ?, old_qty = ? WHERE transaction_id = ?', (str(items), str(old_qty), id))
     db.commit()
 
-    bot.send_message(call.message.chat.id, 'Item added to transaction')
+    # Get new quantity
+    bot.send_message(call.message.chat.id, f'Current Quantity of {item}: {current_qty}')
+    msg = bot.send_message(call.message.chat.id, f'New Quantity of {item}?\n(Reply to this message)')
+    bot.register_next_step_handler(msg, add_new_qty, id, current_qty)
 
-    # Query for change in qty
+    
+def add_new_qty(message, id, old_qty):
+    # Validate quantity
+    try:
+        qty = int(message.text)
+        if qty <= 0:
+            bot.reply_to(message, 'Invalid Quantity.')
+    except:
+        bot.reply_to(message, 'Invalid Quantity.')
 
+    # Get current transaction data
+    cursor.execute('SELECT change, new_qty FROM transactions WHERE transaction_id = ?', (id,))
+    data = cursor.fetchone()
+    change = json.loads(data[0])
+    new_qty = json.loads(data[1])
 
+    # Update data
+    change.append(qty-old_qty)
+    new_qty.append(qty)
+
+    # Update database
+    cursor.execute('UPDATE transactions SET change = ?, new_qty = ? WHERE transaction_id = ?', (str(change),str(new_qty), id))
+    db.commit()
+
+    # Query for customer
+    bot.send_message(message.chat.id, 'Customer for transaction?')
 
 
 
