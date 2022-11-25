@@ -4,7 +4,7 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import re
-from transactions import Transaction, toTransaction
+from transactions import Transaction, toTransaction, insertTransaction
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -48,7 +48,8 @@ def index(message):
                 'View Current Stock': {'callback_data': 'View Current Stock'},
                 'Add New Item': {'callback_data': 'Add New Item'},
                 'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
-                'View Transaction History': {'callback_data': 'View Transaction History'}},
+                'View Transaction History': {'callback_data': 'View Transaction History'},
+                'Add/Change Contact': {'callback_data': 'Contact'}},
                 row_width=1))
 
 
@@ -168,15 +169,15 @@ def choose_type(call):
     types = {
         'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
         'Remove Transaction Type': {'callback_data': 'Remove Transaction Type'},
-        'Issue': {'callback_data': '(trans_type) Issue'},
-        'Loan': {'callback_data': '(trans_type) Loan'}
+        'Issue': {'callback_data': '(n_trans) Issue'},
+        'Loan': {'callback_data': '(n_trans)) Loan'}
         }
     
     # Get additional transaction types from store
     cursor.execute('SELECT type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
     rows = cursor.fetchall()
     for row in rows:
-        types[row[0]] = {'callback_data': f'(trans_type) {row[0]}'}
+        types[row[0]] = {'callback_data': f'(n_trans) {row[0]}'}
 
     # Create transaction types markup
     markup = quick_markup(types, row_width=1)
@@ -255,14 +256,11 @@ def remove_type_db(call):
 
 
 
-# Handles issue/loan transaction
-@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(trans_type)')
+# Opens a new transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(n_trans)')
 def open_new_transaction(call):
 
     bot.delete_message(call.message.chat.id, call.message.id)
-
-    # Start a new transaction
-    
 
     # Get items in store
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
@@ -272,19 +270,36 @@ def open_new_transaction(call):
     if len(items) == 0:
         bot.send_message(call.message.chat.id, 'There are no items in currently in this store.')
 
+    # Start a transaction
+    transaction = Transaction(store_id=call.message.chat.id,operator=call.from_user.username,type=re.sub('(\(n_trans\)) ', '', call.data))
+
+    # Add transaction to db
+    cursor.execute('INSERT INTO transactions (store_id, Operator, Customer, Item, Type, Loan_id, Old_Qty, Change, New_Qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (transaction.store_id,transaction.operator,transaction.customer,transaction.items,transaction.type,transaction.loan_id,transaction.old_qty,transaction.change,transaction.new_qty))
+    db.commit()
+    print(cursor.lastrowid())
+    return
     # Create markup
     markup = {}
     for item in items:
-        markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(trans_item) {item[0]}' }
+        markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(add_item) {item[0]} ' + transaction.toString()}
+
+
 
     # Query for item
     bot.send_message(call.message.chat.id, 'Select item involved in transaction', reply_markup=quick_markup(markup, row_width=1))
 
 
+# Adds item to transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_item)')
+def add_item_to_transaction(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
 
+    # Get transaction data
+    transaction = toTransaction(call.data.split()[2])
 
-
-
+    # Add item to transaction data
+    print(transaction.type)
 
 
 
