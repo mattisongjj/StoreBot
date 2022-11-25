@@ -4,7 +4,7 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import re
-from transactions import Transaction, toTransaction, insertTransaction
+from transactions import Transaction, insertTransaction
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -151,7 +151,7 @@ def add_item(message):
     global n_item
     cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, n_item, int(message.text)))
     db.commit()
-    bot.send_message(message.chat.id, f'x{message.text} {n_item} has been created and added to stock.')
+    bot.send_message(message.chat.id, f'x{message.text} {n_item} has been created and added to stock. Enter /start to add another item.')
 
 
 
@@ -268,23 +268,19 @@ def open_new_transaction(call):
 
     # Ensure at least one item
     if len(items) == 0:
-        bot.send_message(call.message.chat.id, 'There are no items in currently in this store.')
+        bot.send_message(call.message.chat.id, 'There are no items in currently in this store. Add items to enable transactions.')
+        return
 
     # Start a transaction
     transaction = Transaction(store_id=call.message.chat.id,operator=call.from_user.username,type=re.sub('(\(n_trans\)) ', '', call.data))
 
     # Add transaction to db
-    cursor.execute('INSERT INTO transactions (store_id, Operator, Customer, Item, Type, Loan_id, Old_Qty, Change, New_Qty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    (transaction.store_id,transaction.operator,transaction.customer,transaction.items,transaction.type,transaction.loan_id,transaction.old_qty,transaction.change,transaction.new_qty))
-    db.commit()
-    print(cursor.lastrowid())
-    return
+    id = insertTransaction(transaction, db)
+
     # Create markup
     markup = {}
     for item in items:
-        markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(add_item) {item[0]} ' + transaction.toString()}
-
-
+        markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(add_item) {id} {item[0]}'}
 
     # Query for item
     bot.send_message(call.message.chat.id, 'Select item involved in transaction', reply_markup=quick_markup(markup, row_width=1))
@@ -295,11 +291,20 @@ def open_new_transaction(call):
 def add_item_to_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
-    # Get transaction data
-    transaction = toTransaction(call.data.split()[2])
+    # Get transaction id
+    id = int(call.data.split()[1])
 
-    # Add item to transaction data
-    print(transaction.type)
+    # Get item
+    item = re.sub(f'(\(add_item\) {id} )', '', call.data)
+
+    # Update db
+    cursor.execute('UPDATE transactions SET Item = ? WHERE transaction_id = ?', (item, id))
+    db.commit()
+
+    bot.send_message(call.message.chat.id, 'Item added to transaction')
+
+    # Query for change in qty
+
 
 
 
