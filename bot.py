@@ -50,7 +50,7 @@ def index(message):
                 'Add New Item': {'callback_data': 'Add New Item'},
                 'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'},
-                'Add/Change Contact': {'callback_data': 'Contact'}},
+                'Edit store details': {'callback_data': 'Edit details'}},
                 row_width=1))
 
 
@@ -279,7 +279,9 @@ def open_new_transaction(call):
 
     # Create markup
     markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
+                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
                             'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
     
@@ -293,11 +295,11 @@ def show_items(call):
 
     # Get current transaction data
     id = int(call.data.split()[1])
-    cursor.execute('SELECT items, change FROM transactions WHERE transaction_id = ?', (id,))
+    cursor.execute('SELECT items, change, type FROM transactions WHERE transaction_id = ?', (id,))
     data = cursor.fetchone()
-    print(data)
     transaction_items = json.loads(data[0])
     changes = json.loads(data[1])
+    type = data[2]
     
     # Get items in store
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
@@ -311,11 +313,11 @@ def show_items(call):
 
     # If no items in transaction
     if not transaction_items:
-        bot.send_message(call.message.chat.id, f'Select an item to add to transaction.\nNo items currently in transaction', reply_markup=quick_markup(markup, row_width=1))
+        bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction.\nNo items currently in transaction", reply_markup=quick_markup(markup, row_width=1))
         return
 
     # Create reply message
-    reply = 'Select an item to add to transaction.\nCurrent items in transaction:\n'
+    reply = f"Select an item to add to '{type}' transaction.\nCurrent items in transaction:\n"
     for item in transaction_items:
         reply = reply + f'{item} x{abs(changes[item])}\n'
 
@@ -350,18 +352,16 @@ def add_item_to_transaction(call):
     old_qty[item] = current_qty
 
     # Update db
-    cursor.execute('UPDATE transactions SET items = ?, old_qty = ? WHERE transaction_id = ?', (str(items), str(old_qty), id))
+    cursor.execute('UPDATE transactions SET items = ?, old_qty = ? WHERE transaction_id = ?', (json.dumps(items), json.dumps(old_qty), id))
     db.commit()
 
     # Get new quantity
     bot.send_message(call.message.chat.id, f'Current Quantity of {item}: {current_qty}')
     msg = bot.send_message(call.message.chat.id, f'New Quantity of {item}?\n(Reply to this message)')
-    bot.register_next_step_handler(msg, add_new_qty, msg, id, current_qty, item)
+    bot.register_next_step_handler(msg, add_new_qty, id, current_qty, item)
 
     
-def add_new_qty(message, msg, id, old_qty, item):
-    bot.delete_message(msg.chat.id, msg.id)
-
+def add_new_qty(message, id, old_qty, item):
     # Validate quantity
     try:
         qty = int(message.text)
@@ -382,12 +382,14 @@ def add_new_qty(message, msg, id, old_qty, item):
     new_qty[item] = qty
 
     # Update database
-    cursor.execute('UPDATE transactions SET change = ?, new_qty = ? WHERE transaction_id = ?', (str(change),str(new_qty), id))
+    cursor.execute('UPDATE transactions SET change = ?, new_qty = ? WHERE transaction_id = ?', (json.dumps(change),json.dumps(new_qty), id))
     db.commit()
 
     # Create reply markup
     markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
+                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
                             'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
     
