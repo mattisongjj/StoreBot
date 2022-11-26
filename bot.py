@@ -135,9 +135,9 @@ def get_total(message):
         bot.reply_to(message, 'Item already exist in store.')
     # Get quantity
     msg = bot.reply_to(message,'Quantity of item?', reply_markup=types.ForceReply(True, 'Quantity of item'))
-    bot.register_next_step_handler(msg, add_item, item)
+    bot.register_next_step_handler(msg, get_minimum, item)
 
-def add_item(message, item):
+def get_minimum(message, item):
     # Validate quantity
     try:
         qty = int(message.text)
@@ -148,10 +148,22 @@ def add_item(message, item):
         bot.reply_to(message, 'Invalid Quantity')
         return
 
+    msg = bot.reply_to(message, f"Reply to this message the minimum requirement of '{item}' in store.\n(Reply '0' if item does not have a mimimum requirement)")
+    bot.register_next_step_handler(msg, add_item, item, qty)
+
+def add_item(message, item, qty):
+    # Validate minimum
+    try:
+        min = int(message.text)
+        if min < 0:
+            bot.reply_to(message, 'Invalid Quantity')
+    except:
+        bot.reply_to(message, 'Invalid quantity')
+    
     # Add item to database
-    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, item, qty))
+    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
     db.commit()
-    bot.send_message(message.chat.id, f'x{message.text} {item} has been created and added to stock. Enter /start to add another item.')
+    bot.send_message(message.chat.id, f'x{qty} {item} has been added to store. (Minimum requirement: {min})')
 
 
 
@@ -310,6 +322,18 @@ def show_items(call):
     for item in rows:
         if item[0] not in transaction_items:
             markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(add_item) {id} {item[0]}'}
+    
+    # If every items in store have been added to transactions
+    if not markup:
+        markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
+                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
+                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
+                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
+                            row_width=1)
+        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction.", reply_markup=markup)
+        return
+
 
     # If no items in transaction
     if not transaction_items:
@@ -357,7 +381,7 @@ def add_item_to_transaction(call):
 
     # Get new quantity
     bot.send_message(call.message.chat.id, f'Current Quantity of {item}: {current_qty}')
-    msg = bot.send_message(call.message.chat.id, f'New Quantity of {item}?\n(Reply to this message)')
+    msg = bot.send_message(call.message.chat.id, f'<b>NEW QUANTITY</b> of {item}?\n(Reply to this message)', parse_mode='HTML')
     bot.register_next_step_handler(msg, add_new_qty, id, current_qty, item)
 
     
