@@ -18,7 +18,7 @@ except Error as e:
     print(f"Error '{e}' occured when establishing connection to database")
 cursor = db.cursor()
 
-n_item = ''
+
 
 
 def isadmin(chat, user):
@@ -126,20 +126,18 @@ def new_item(call):
 
 def get_total(message):
     # Ensure message is text
-    if not message.text:
+    item = message.text
+    if not item:
         bot.reply_to(message, 'Invalid item name.')
     # Check database if item already exist
-    cursor.execute('SELECT * FROM stocks WHERE store_id = ? AND ItemName = ?', (message.chat.id, message.text))
+    cursor.execute('SELECT * FROM stocks WHERE store_id = ? AND ItemName = ?', (message.chat.id, item))
     if len(cursor.fetchall()) != 0:
         bot.reply_to(message, 'Item already exist in store.')
-    # Remember item name
-    global n_item 
-    n_item = message.text
     # Get quantity
     msg = bot.reply_to(message,'Quantity of item?', reply_markup=types.ForceReply(True, 'Quantity of item'))
-    bot.register_next_step_handler(msg, add_item)
+    bot.register_next_step_handler(msg, add_item, item)
 
-def add_item(message):
+def add_item(message, item):
     # Validate quantity
     try:
         qty = int(message.text)
@@ -151,10 +149,9 @@ def add_item(message):
         return
 
     # Add item to database
-    global n_item
-    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, n_item, qty))
+    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity) VALUES (?, ?, ?)', (message.chat.id, item, qty))
     db.commit()
-    bot.send_message(message.chat.id, f'x{message.text} {n_item} has been created and added to stock. Enter /start to add another item.')
+    bot.send_message(message.chat.id, f'x{message.text} {item} has been created and added to stock. Enter /start to add another item.')
 
 
 
@@ -273,20 +270,58 @@ def open_new_transaction(call):
     if len(items) == 0:
         bot.send_message(call.message.chat.id, 'There are no items in currently in this store. Add items to enable transactions.')
         return
-
+    type=re.sub('(\(n_trans\)) ', '', call.data)
     # Start a transaction
-    transaction = Transaction(store_id=call.message.chat.id,operator=call.from_user.username,type=re.sub('(\(n_trans\)) ', '', call.data))
+    transaction = Transaction(store_id=call.message.chat.id,operator=call.from_user.username,type=type)
 
     # Add transaction to db
     id = insertTransaction(transaction, db)
 
     # Create markup
-    markup = {}
-    for item in items:
-        markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(add_item) {id} {item[0]}'}
+    markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
+                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
+                            row_width=1)
+    
+    bot.send_message(call.message.chat.id, f"New transaction of type '{type}' opened, select one of the options to continue.", reply_markup=markup)
 
-    # Query for item
-    bot.send_message(call.message.chat.id, 'Select item involved in transaction', reply_markup=quick_markup(markup, row_width=1))
+
+# Shows items to add to transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_items)')
+def show_items(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get current transaction data
+    id = int(call.data.split()[1])
+    cursor.execute('SELECT items, change FROM transactions WHERE transaction_id = ?', (id,))
+    data = cursor.fetchone()
+    print(data)
+    transaction_items = json.loads(data[0])
+    changes = json.loads(data[1])
+    
+    # Get items in store
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    rows = cursor.fetchall()
+
+    # Show items not in transaction
+    markup = {}
+    for item in rows:
+        if item[0] not in transaction_items:
+            markup[f'{item[0]} ({item[1]})'] = {'callback_data': f'(add_item) {id} {item[0]}'}
+
+    # If no items in transaction
+    if not transaction_items:
+        bot.send_message(call.message.chat.id, f'Select an item to add to transaction.\nNo items currently in transaction', reply_markup=quick_markup(markup, row_width=1))
+        return
+
+    # Create reply message
+    reply = 'Select an item to add to transaction.\nCurrent items in transaction:\n'
+    for item in transaction_items:
+        reply = reply + f'{item} x{abs(changes[item])}\n'
+
+    bot.send_message(call.message.chat.id, reply, reply_markup=quick_markup(markup, row_width=1))
+
+
 
 
 # Adds item to transaction
@@ -311,8 +346,8 @@ def add_item_to_transaction(call):
     current_qty = cursor.fetchone()[0]
 
     # Get new data
-    old_qty.append(current_qty)
-    items.append(re.sub(f'(\(add_item\) {id} )', '', call.data))
+    items.append(item)
+    old_qty[item] = current_qty
 
     # Update db
     cursor.execute('UPDATE transactions SET items = ?, old_qty = ? WHERE transaction_id = ?', (str(items), str(old_qty), id))
@@ -321,10 +356,12 @@ def add_item_to_transaction(call):
     # Get new quantity
     bot.send_message(call.message.chat.id, f'Current Quantity of {item}: {current_qty}')
     msg = bot.send_message(call.message.chat.id, f'New Quantity of {item}?\n(Reply to this message)')
-    bot.register_next_step_handler(msg, add_new_qty, id, current_qty)
+    bot.register_next_step_handler(msg, add_new_qty, msg, id, current_qty, item)
 
     
-def add_new_qty(message, id, old_qty):
+def add_new_qty(message, msg, id, old_qty, item):
+    bot.delete_message(msg.chat.id, msg.id)
+
     # Validate quantity
     try:
         qty = int(message.text)
@@ -334,21 +371,27 @@ def add_new_qty(message, id, old_qty):
         bot.reply_to(message, 'Invalid Quantity.')
 
     # Get current transaction data
-    cursor.execute('SELECT change, new_qty FROM transactions WHERE transaction_id = ?', (id,))
+    cursor.execute('SELECT type, change, new_qty FROM transactions WHERE transaction_id = ?', (id,))
     data = cursor.fetchone()
-    change = json.loads(data[0])
-    new_qty = json.loads(data[1])
+    type = data[0]
+    change = json.loads(data[1])
+    new_qty = json.loads(data[2])
 
     # Update data
-    change.append(qty-old_qty)
-    new_qty.append(qty)
+    change[item] = qty - old_qty
+    new_qty[item] = qty
 
     # Update database
     cursor.execute('UPDATE transactions SET change = ?, new_qty = ? WHERE transaction_id = ?', (str(change),str(new_qty), id))
     db.commit()
 
-    # Query for customer
-    bot.send_message(message.chat.id, 'Customer for transaction?')
+    # Create reply markup
+    markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
+                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
+                            row_width=1)
+    
+    bot.send_message(message.chat.id, f"x{abs(qty-old_qty)} {item} has been added to '{type}' transaction.", reply_markup=markup)
 
 
 

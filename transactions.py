@@ -1,5 +1,5 @@
 class Transaction:
-    def __init__(self, store_id=None, operator=None, customer=None, items='[]', type=None, loan_id=None, old_qty='[]', change='[]', new_qty='[]', datetime=None):
+    def __init__(self, store_id=None, operator=None, customer=None, items='[]', type=None, loan_id=None, old_qty='{}', change='{}', new_qty='{}', datetime=None):
         self.store_id = store_id
         self.operator = operator
         self.customer = customer

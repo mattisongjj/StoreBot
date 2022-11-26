@@ -1,5 +1,6 @@
+import transactions
 import json
 
-aString = '["a", "b", "1", "c"]'
+list = json.loads('["Fire extinguisher"]')
 
-print(''.join(json.loads(aString)))
+print(list)
