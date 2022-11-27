@@ -1,6 +1,5 @@
 import transactions
 import json
 
-list = json.loads('["Fire extinguisher"]')
+transaction = transactions.Transaction(type='123',store_id=1)
 
-print(list)

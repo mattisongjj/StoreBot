@@ -5,7 +5,7 @@ import sqlite3
 from sqlite3 import Error
 import re
 import json
-from transactions import Transaction, insertTransaction
+from transactions import Transaction, insertTransaction, transaction_info
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -50,7 +50,7 @@ def index(message):
                 'Add New Item': {'callback_data': 'Add New Item'},
                 'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'},
-                'Edit store details': {'callback_data': 'Edit details'}},
+                'Edit Store Details': {'callback_data': 'Edit Store Details'}},
                 row_width=1))
 
 
@@ -331,7 +331,7 @@ def show_items(call):
                             'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
-        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction.", reply_markup=markup)
+        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=markup)
         return
 
 
@@ -417,7 +417,7 @@ def add_new_qty(message, id, old_qty, item):
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
     
-    bot.send_message(message.chat.id, f"x{abs(qty-old_qty)} {item} has been added to '{type}' transaction.", reply_markup=markup)
+    bot.send_message(message.chat.id, f"x{abs(qty-old_qty)} {item} has been added to '{type}' transaction." + transaction_info(id, db) , reply_markup=markup)
 
 
 
