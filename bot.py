@@ -5,7 +5,7 @@ import sqlite3
 from sqlite3 import Error
 import re
 import json
-from transactions import Transaction, insertTransaction, transaction_info
+from transactions import Transaction, insertTransaction, transaction_info, transaction_markup
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -290,13 +290,8 @@ def open_new_transaction(call):
     id = insertTransaction(transaction, db)
 
     # Create markup
-    markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
-                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
-                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
-                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
-                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
-                            row_width=1)
-    
+    markup = transaction_markup(id)
+
     bot.send_message(call.message.chat.id, f"New transaction of type '{type}' opened, select one of the options to continue.", reply_markup=markup)
 
 
@@ -325,12 +320,7 @@ def show_items(call):
     
     # If every items in store have been added to transactions
     if not markup:
-        markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
-                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
-                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
-                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
-                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
-                            row_width=1)
+        markup = transaction_markup(id)
         bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=markup)
         return
 
@@ -410,12 +400,7 @@ def add_new_qty(message, id, old_qty, item):
     db.commit()
 
     # Create reply markup
-    markup = quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
-                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
-                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
-                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
-                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
-                            row_width=1)
+    markup = transaction_markup(id)
     
     bot.send_message(message.chat.id, f"x{abs(qty-old_qty)} {item} has been added to '{type}' transaction." + transaction_info(id, db) , reply_markup=markup)
 

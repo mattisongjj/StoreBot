@@ -1,4 +1,5 @@
 import json
+from telebot.util import quick_markup
 
 class Transaction:
     def __init__(self, store_id=None, operator=None, customer=None, items='[]', type=None, loan_id=None, old_qty='{}', change='{}', new_qty='{}', datetime=None):
@@ -34,3 +35,12 @@ def transaction_info(id, db):
     for item in items:
         reply = reply + f'{item} x{changes[item]}'
     return reply
+
+# Inline keyboard markup for transactions
+def transaction_markup(id):
+    return quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
+                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
+                            'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
+                            'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
+                            row_width=1)
