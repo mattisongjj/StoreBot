@@ -157,8 +157,10 @@ def add_item(message, item, qty):
         min = int(message.text)
         if min < 0:
             bot.reply_to(message, 'Invalid Quantity')
+            return
     except:
         bot.reply_to(message, 'Invalid quantity')
+        return
     
     # Add item to database
     cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
@@ -289,15 +291,15 @@ def open_new_transaction(call):
     # Add transaction to db
     id = insertTransaction(transaction, db)
 
-    # Create markup
-    markup = transaction_markup(id)
+    bot.send_message(call.message.chat.id, f'New transaction of type {type} opened, select one of the options to continue.', reply_markup=transaction_markup(id))
 
-    bot.send_message(call.message.chat.id, f"New transaction of type '{type}' opened, select one of the options to continue.", reply_markup=markup)
+    
+
 
 
 # Shows items to add to transaction
-@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_items)')
-def show_items(call):
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_add_items)')
+def show_add_items(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Get current transaction data
@@ -320,18 +322,17 @@ def show_items(call):
     
     # If every items in store have been added to transactions
     if not markup:
-        markup = transaction_markup(id)
-        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=markup)
+        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=transaction_markup(id))
         return
 
 
     # If no items in transaction
     if not transaction_items:
-        bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction.\nNo items currently in transaction", reply_markup=quick_markup(markup, row_width=1))
+        bot.send_message(call.message.chat.id, f'Select an item to add to {type} transaction.\nNo items currently in transaction', reply_markup=quick_markup(markup, row_width=1))
         return
 
     # Create reply message
-    reply = f"Select an item to add to '{type}' transaction.\nCurrent items in transaction:\n"
+    reply = f'Select an item to add to {type} transaction.\nCurrent items in transaction:\n'
     for item in transaction_items:
         reply = reply + f'{item} x{abs(changes[item])}\n'
 
@@ -380,9 +381,14 @@ def add_new_qty(message, id, old_qty, item):
     try:
         qty = int(message.text)
         if qty <= 0:
-            bot.reply_to(message, 'Invalid Quantity.')
+            bot.reply_to(message, 'Invalid Quantity. Quantity cannot be negative.')
+            return
+        elif qty == old_qty:
+            bot.reply_to(message, 'Invalid Quantity. Quantity must change.')
+            return
     except:
-        bot.reply_to(message, 'Invalid Quantity.')
+        bot.reply_to(message, 'Invalid Quantity. Quantity must be a number.')
+        return
 
     # Get current transaction data
     cursor.execute('SELECT type, change, new_qty FROM transactions WHERE transaction_id = ?', (id,))
@@ -398,11 +404,49 @@ def add_new_qty(message, id, old_qty, item):
     # Update database
     cursor.execute('UPDATE transactions SET change = ?, new_qty = ? WHERE transaction_id = ?', (json.dumps(change),json.dumps(new_qty), id))
     db.commit()
-
-    # Create reply markup
-    markup = transaction_markup(id)
     
-    bot.send_message(message.chat.id, f"x{abs(qty-old_qty)} {item} has been added to '{type}' transaction." + transaction_info(id, db) , reply_markup=markup)
+    bot.send_message(message.chat.id, f'x{abs(qty-old_qty)} {item} has been added to {type} transaction.' + transaction_info(id, db) , reply_markup=transaction_markup(id))
+
+
+
+
+
+# Shows items to remove from transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_remove_items)')
+def show_remove_item(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction id
+    id = int(call.data.split()[1])
+
+    # Get transaction data
+    cursor.execute('SELECT items, change FROM transactions WHERE transaction_id = ?', (id,))
+    data = cursor.fetchone()
+    items = json.loads(data[0])
+
+    # Validate data
+    if not items:
+        bot.send_message(call.message.chat.id, 'There are no items in this transaction to remove.', reply_markup=transaction_markup(id))
+        return
+    
+    # Create markup
+    markup = {}
+    for item in items:
+        markup[f'{item}'] = {'callback_data': f'(remove_item) {id} {item}'}
+
+    bot.send_message(call.message.chat.id, 'Select item to remove from transaction.', reply_markup=quick_markup(markup, row_width=1))
+
+    
+
+# Removes item from transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item)')
+def remove_item(call):
+    pass
+
+
+
+
+
 
 
 

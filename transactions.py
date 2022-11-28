@@ -33,13 +33,16 @@ def transaction_info(id, db):
     changes = json.loads(info[3])
     reply = f'\n\nCurrent Transaction:\n\nType - {info[0]}\nCustomer - {customer}\n\n'
     for item in items:
-        reply = reply + f'{item} x{changes[item]}'
+        if changes[item] > 0:
+            reply = reply + f'{item} +{changes[item]}'
+        else:
+            reply = reply + f'{item} {changes[item]}'
     return reply
 
 # Inline keyboard markup for transactions
 def transaction_markup(id):
-    return quick_markup({'Select Items': {'callback_data': f'(select_items) {id}'},
-                            'Remove Items': {'callback_data': f'(remove_items) {id}'},
+    return quick_markup({'Select Items': {'callback_data': f'(select_add_items) {id}'},
+                            'Remove Items': {'callback_data': f'(select_remove_items) {id}'},
                             'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
                             'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
