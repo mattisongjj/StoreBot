@@ -183,6 +183,7 @@ def choose_type(call):
     types = {
         'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
         'Remove Transaction Type': {'callback_data': 'Remove Transaction Type'},
+        'Rename Transaction Type': {'callback_data': 'Rename Transaction Type'},
         'Issue': {'callback_data': '(n_trans) Issue'},
         'Loan': {'callback_data': '(n_trans)) Loan'}
         }
@@ -266,6 +267,59 @@ def remove_type_db(call):
     cursor.execute('DELETE FROM transaction_types WHERE store_id = ? AND type = ?', (call.message.chat.id, re.sub('(\(del\)) ', '', call.data)))
     db.commit()
     bot.send_message(call.message.chat.id, 'Transaction type succesfully deleted')
+
+
+
+# Handles renaming of transction type
+@bot.callback_query_handler(func=lambda call: call.data == 'Rename Transaction Type')
+def rename_transaction_type(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction types
+    cursor.execute('SELECT id, type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
+    types = cursor.fetchall()
+
+    if len(types) == 0:
+        bot.send_message(call.message.chat.id, 'Cannot rename Issue and Loan transaction types.')
+        return
+
+    # Create markup
+    markup = {}
+    for type in types:
+        markup[type[1]] = {'callback_data': f'(rename) {type[0]}'}
+
+    bot.send_message(call.message.chat.id, 'Select transction type to rename.', reply_markup=quick_markup(markup, row_width=1))
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename)')
+def get_new_name(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction type id and name
+    id = int(re.sub('(\(rename\)) ', '', call.data))
+    cursor.execute('SELECT type FROM transaction_types WHERE id = ?', (id,))
+    type = cursor.fetchone()[0]
+
+    # Query for new name
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message the new name of '{type}' transaction type", parse_mode='HTML')
+    bot.register_next_step_handler(msg, rename_transaction_type_db, id, type)
+
+def rename_transaction_type_db(message, id ,type):
+
+    # Valdiate new name
+    new_name = message.text
+    if not new_name:
+        bot.reply_to(message, 'Invalid type name.')
+
+    cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ?', (message.chat.id, new_name))
+    rows = cursor.fetchall()
+    if len(rows) != 0:
+        bot.reply_to(message, f'{new_name} transaction type has already been added to store.')
+
+    # Update database
+    cursor.execute('UPDATE transaction_types SET type = ? WHERE id = ?', (new_name, id))
+    db.commit()
+
+    bot.send_message(message.chat.id, f"'{type}' successfully renamed to '{new_name}'.")
 
 
 
