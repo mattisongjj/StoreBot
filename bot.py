@@ -29,6 +29,17 @@ def isadmin(chat, user):
         return False
     return True
 
+def send_index(chat):
+    # Send index options in chat
+    bot.send_message(chat.id, 'Choose an option', reply_markup=quick_markup({
+                'View Current Stock': {'callback_data': 'View Current Stock'},
+                'Add New Item': {'callback_data': 'Add New Item'},
+                'Rename Item': {'callback_data': 'Rename Item'},
+                'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
+                'View Transaction History': {'callback_data': 'View Transaction History'},
+                'Edit Store Details': {'callback_data': 'Edit Store Details'}},
+                row_width=1))
+
 # Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
 def index(message):
@@ -45,13 +56,7 @@ def index(message):
             return
         # Show Options
         else:
-            bot.send_message(message.chat.id, 'Choose an option', reply_markup=quick_markup({
-                'View Current Stock': {'callback_data': 'View Current Stock'},
-                'Add New Item': {'callback_data': 'Add New Item'},
-                'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
-                'View Transaction History': {'callback_data': 'View Transaction History'},
-                'Edit Store Details': {'callback_data': 'Edit Store Details'}},
-                row_width=1))
+            send_index(message.chat)
 
 
     # Bot was started in a private chat
@@ -74,9 +79,6 @@ def index(message):
 @bot.callback_query_handler(func=lambda call: call.data == 'View Current Stock')
 def view_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
-    # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
-        return
     # Query database for items
     cursor.execute('SELECT ItemName FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
@@ -121,7 +123,10 @@ def full_stock(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Item')
 def new_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
-    msg = bot.send_message(call.message.chat.id, 'Name of new item?\n(Reply to this message)')
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new item.', parse_mode='HTML')
     bot.register_next_step_handler(msg, get_total)
 
 def get_total(message):
@@ -148,7 +153,7 @@ def get_minimum(message, item):
         bot.reply_to(message, 'Invalid Quantity')
         return
 
-    msg = bot.reply_to(message, f"Reply to this message the minimum requirement of '{item}' in store.\n(Reply '0' if item does not have a mimimum requirement)")
+    msg = bot.reply_to(message, f"Reply to this message the minimum quantity of '{item}' required in store.\n(Reply '0' if item does not have a mimimum requirement)", reply_markup=types.ForceReply(True, 'Minimum quantity.'))
     bot.register_next_step_handler(msg, add_item, item, qty)
 
 def add_item(message, item, qty):
@@ -166,7 +171,66 @@ def add_item(message, item, qty):
     cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
     db.commit()
     bot.send_message(message.chat.id, f'x{qty} {item} has been added to store. (Minimum requirement: {min})')
+    send_index(message.chat)
 
+
+
+
+    
+# Handles renaming of item
+@bot.callback_query_handler(func=lambda call: call.data == 'Rename Item')
+def rename_item_query(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
+
+    # Get current items in store
+    cursor.execute('SELECT ItemName, stock_id FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    rows = cursor.fetchall()
+    if len(rows) == 0:
+        bot.send_message(call.message.chat.id, 'There is currently no items in store.')
+        return
+
+    # Create markup
+    markup = {}
+    for item in rows:
+        markup[item[0]] = {'callback_data': f'(rename_item) {item[1]}'}
+
+    # Query for item to be renamed
+    bot.send_message(call.message.chat.id, 'Choose item to be renamed.', reply_markup=quick_markup(markup, row_width=1))
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename_item)')
+def new_itemname_query(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get item information
+    stock_id = int(call.data.split()[1])
+    cursor.execute('SELECT ItemName FROM stocks WHERE stock_id = ?', (stock_id,))
+    item = cursor.fetchone()[0]
+
+    # Query for new name
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message new name of '{item}'.", parse_mode='HTML')
+    bot.register_next_step_handler(msg, rename_item_db, stock_id, item)
+
+def rename_item_db(message, stock_id, item):
+    # Validate new name
+    new_name = message.text
+    if not new_name:
+        bot.reply_to(message, 'Invalid item name')
+        return
+    cursor.execute('SELECT * FROM stocks WHERE ItemName = ? AND store_id = ?', (new_name, message.chat.id))
+    if len(cursor.fetchall()) > 0:
+        bot.reply_to(message, 'This item is already in store')
+        return
+    
+    # Update database
+    cursor.execute('UPDATE stocks SET ItemName = ? WHERE stock_id = ?', (new_name, stock_id))
+    db.commit()
+
+    bot.send_message(message.chat.id, f"'{item}' renamed to '{new_name}'.")
+    send_index(message.chat)
 
 
 
@@ -286,16 +350,16 @@ def rename_transaction_type(call):
     # Create markup
     markup = {}
     for type in types:
-        markup[type[1]] = {'callback_data': f'(rename) {type[0]}'}
+        markup[type[1]] = {'callback_data': f'(rename_type) {type[0]}'}
 
     bot.send_message(call.message.chat.id, 'Select transction type to rename.', reply_markup=quick_markup(markup, row_width=1))
 
-@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename)')
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename_type)')
 def get_new_name(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Get transaction type id and name
-    id = int(re.sub('(\(rename\)) ', '', call.data))
+    id = int(call.data.split()[1])
     cursor.execute('SELECT type FROM transaction_types WHERE id = ?', (id,))
     type = cursor.fetchone()[0]
 
@@ -309,17 +373,18 @@ def rename_transaction_type_db(message, id ,type):
     new_name = message.text
     if not new_name:
         bot.reply_to(message, 'Invalid type name.')
+        return
 
     cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ?', (message.chat.id, new_name))
-    rows = cursor.fetchall()
-    if len(rows) != 0:
+    if len(cursor.fetchall()) > 0:
         bot.reply_to(message, f'{new_name} transaction type has already been added to store.')
+        return
 
     # Update database
     cursor.execute('UPDATE transaction_types SET type = ? WHERE id = ?', (new_name, id))
     db.commit()
 
-    bot.send_message(message.chat.id, f"'{type}' successfully renamed to '{new_name}'.")
+    bot.send_message(message.chat.id, f"'{type}' renamed to '{new_name}'.")
 
 
 
