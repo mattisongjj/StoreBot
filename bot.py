@@ -470,82 +470,91 @@ def show_add_items(call):
         bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction.\nNo items currently in transaction.", reply_markup=quick_markup(markup, row_width=1))
         return
 
-    # Create reply message
-    reply = f"Select an item to add to '{type}' transaction.\nCurrent items in transaction:\n"
-    for item in items:
-        reply = reply + f'{item} x{abs(items[item])}\n'
-
-    bot.send_message(call.message.chat.id, reply, reply_markup=quick_markup(markup, row_width=1))
+    # Query for item to be added
+    bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction." + transaction_info(id,db), reply_markup=quick_markup(markup, row_width=1))
 
 
 
 
 # Adds item to transaction
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_item)')
-def add_item_to_transaction(call):
+def query_change_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
-    # Get transaction id
-    id = int(call.data.split()[1])
+    # Get transaction id and stock id from call
+    trans_id = int(call.data.split()[1])
+    stock_id = int(call.data.split()[2])
 
-    # Get current transaction data
-    cursor.execute('SELECT items, old_qty FROM transactions WHERE transaction_id = ?', (id,))
-    data = cursor.fetchone()
-    items = json.loads(data[0])
-    old_qty = json.loads(data[1])
-    
-    # Get item to add
-    item = re.sub(f'(\(add_item\) {id} )', '', call.data)
+    # Get transaction type
+    cursor.execute('SELECT type FROM transactions JOIN transaction_types ON transactions.type_id = transaction_types.id WHERE transactions.id = ?', (trans_id,))
+    type = cursor.fetchone()[0]
 
-    # Get current quantity of item
-    cursor.execute('SELECT Quantity FROM stocks WHERE store_id = ? AND ItemName = ?', (call.message.chat.id, item))
-    current_qty = cursor.fetchone()[0]
+    # Get item data
+    cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
+    item = cursor.fetchone()[0]
 
-    # Get new data
-    items.append(item)
-    old_qty[item] = current_qty
+    # Query for increase or decrease
+    bot.send_message(call.message.chat.id, f"Is quantity of '{item}' increased or decreased in '{type}' transaction?", reply_markup=quick_markup({ 'Increase': {'callback_data': f'(increase_item) {trans_id} {stock_id}'},
+                                                                                                                                                    'Decrease': {'callback_data': f'(decrease_item) {trans_id} {stock_id}'}
+                                                                                                                                               }, row_width=1))
 
-    # Update db
-    cursor.execute('UPDATE transactions SET items = ?, old_qty = ? WHERE transaction_id = ?', (json.dumps(items), json.dumps(old_qty), id))
-    db.commit()
 
-    # Get new quantity
-    bot.send_message(call.message.chat.id, f'Current Quantity of {item}: {current_qty}')
-    msg = bot.send_message(call.message.chat.id, f'<b>NEW QUANTITY</b> of {item}?\n(Reply to this message)', parse_mode='HTML')
-    bot.register_next_step_handler(msg, add_new_qty, id, current_qty, item)
+@bot.callback_query_handler(func=lambda call:call.data.split()[0] in ['(increase_item)', '(decrease_item)'])
+def query_quantity_transactions(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
 
-    
-def add_new_qty(message, id, old_qty, item):
+    # Get transaction id and stock id from call
+    trans_id = int(call.data.split()[1])
+    stock_id = int(call.data.split()[2])
+
+    # Get transaction type
+    cursor.execute('SELECT type FROM transactions JOIN transaction_types ON transactions.type_id = transaction_types.id WHERE transactions.id = ?', (trans_id,))
+    type = cursor.fetchone()[0]
+
+    # Get item data
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ?', (stock_id,))
+    row = cursor.fetchone()
+    item = row[0]
+    qty = row[1]
+
+    # Query for quantity
+    if call.data.split()[0] == '(increase_item)':
+        msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item} increased in '{type}' transaction.", parse_mode='HTML')
+        bot.register_next_step_handler(msg, add_new_qty, trans_id, stock_id, item, qty, True)
+        return
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item} decreased in '{type}' transaction.", parse_mode='HTML')
+    bot.register_next_step_handler(msg, add_new_qty, trans_id, stock_id, item, qty, False)
+
+
+
+def add_new_qty(message, trans_id, stock_id, item, qty, increase):
     # Validate quantity
     try:
-        qty = int(message.text)
-        if qty <= 0:
-            bot.reply_to(message, 'Invalid Quantity. Quantity cannot be negative.')
+        change = int(message.text)
+        if change <= 0:
+            bot.reply_to(message, 'Invalid Quantity. Quantity must be a positive number.')
+            bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
             return
-        elif qty == old_qty:
-            bot.reply_to(message, 'Invalid Quantity. Quantity must change.')
+        if not increase and (qty - change < 0) :
+            bot.reply_to(message, f"Insufficient '{item}' in store. Current quantity: {qty}")
+            bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
             return
     except:
         bot.reply_to(message, 'Invalid Quantity. Quantity must be a number.')
+        bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
         return
 
-    # Get current transaction data
-    cursor.execute('SELECT type, change, new_qty FROM transactions WHERE transaction_id = ?', (id,))
-    data = cursor.fetchone()
-    type = data[0]
-    change = json.loads(data[1])
-    new_qty = json.loads(data[2])
-
-    # Update data
-    change[item] = qty - old_qty
-    new_qty[item] = qty
-
     # Update database
-    cursor.execute('UPDATE transactions SET change = ?, new_qty = ? WHERE transaction_id = ?', (json.dumps(change),json.dumps(new_qty), id))
-    db.commit()
+    if increase:
+        cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (? ,? ,? ,?)', (trans_id, stock_id, qty, change))
+        db.commit()
+        bot.send_message(message.chat.id, f"x{change} '{item}' has been added to transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+        return
     
-    bot.send_message(message.chat.id, f'x{abs(qty-old_qty)} {item} has been added to {type} transaction.' + transaction_info(id, db) , reply_markup=transaction_markup(id))
-
+    cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (? ,? ,? ,?)', (trans_id, stock_id, qty, -change))
+    db.commit()
+    bot.send_message(message.chat.id, f"x{change} '{item}' has been added to transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+    return
 
 
 
