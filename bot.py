@@ -614,15 +614,11 @@ def query_customer(call):
     # Get transaction id
     trans_id = int(call.data.split()[1])
 
-    # Get transaction type
-    cursor.execute('SELECT type FROM transactions JOIN transaction_types ON transactions.type_id = transaction_types.id WHERE transactions.id = ?', (trans_id,))
-    type = cursor.fetchone()[0]
-
     # Query for customer name
     msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message name of customer.", parse_mode='HTML')
-    bot.register_next_step_handler(msg, add_customer, trans_id, type)
+    bot.register_next_step_handler(msg, add_customer, trans_id)
 
-def add_customer(message, trans_id, type):
+def add_customer(message, trans_id):
     # Validate customer name
     customer = message.text
     if not customer:
@@ -633,11 +629,30 @@ def add_customer(message, trans_id, type):
     # Update database
     cursor.execute('UPDATE transactions SET customer = ? WHERE id = ?', (customer, trans_id))
     db.commit()
-    bot.send_message(message.chat.id, f"'{customer}' has been added as customer to '{type}' transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+    bot.send_message(message.chat.id, f"'{customer}' has been set as customer for transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
 
 
 
+# Handles removal of customer from transaction
+@bot.callback_query_handler(func= lambda call: call.data.split()[0] == '(remove_customer)')
+def remove_customer(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
 
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+
+    # Check for existing customer
+    cursor.execute('SELECT customer FROM transactions WHERE id = ?', (trans_id,))
+    customer = cursor.fetchone()[0]
+    if customer == 'NIL':
+        bot.send_message(call.message.chat.id, 'No customer in current transaction to remove.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+        return
+
+    # Remove customer
+    cursor.execute('UPDATE transactions SET customer = ? WHERE id = ?', ('NIL', trans_id))
+    db.commit()
+
+    bot.send_message(call.message.chat.id, f"'{customer}' has been removed as customer for transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
 
 
 
