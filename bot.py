@@ -606,7 +606,34 @@ def remove_item(call):
 
 
 
+# Handles adding of customer to transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_customer)')
+def query_customer(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
 
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+
+    # Get transaction type
+    cursor.execute('SELECT type FROM transactions JOIN transaction_types ON transactions.type_id = transaction_types.id WHERE transactions.id = ?', (trans_id,))
+    type = cursor.fetchone()[0]
+
+    # Query for customer name
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message name of customer.", parse_mode='HTML')
+    bot.register_next_step_handler(msg, add_customer, trans_id, type)
+
+def add_customer(message, trans_id, type):
+    # Validate customer name
+    customer = message.text
+    if not customer:
+        bot.reply_to(message, 'Invalid Customer Name.')
+        bot.send_message(message.chat.id, 'Error adding customer to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
+        return
+
+    # Update database
+    cursor.execute('UPDATE transactions SET customer = ? WHERE id = ?', (customer, trans_id))
+    db.commit()
+    bot.send_message(message.chat.id, f"'{customer}' has been added as customer to '{type}' transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
 
 
 

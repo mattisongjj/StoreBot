@@ -27,6 +27,7 @@ def transaction_markup(id):
     return quick_markup({'Select Items': {'callback_data': f'(select_add_items) {id}'},
                             'Remove Items': {'callback_data': f'(select_remove_items) {id}'},
                             'Add Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
+                            'Remove Customer': {'callback_data': f'(remove_customer) {id}'},
                             'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
