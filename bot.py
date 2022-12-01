@@ -565,32 +565,44 @@ def show_remove_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Get transaction id
-    id = int(call.data.split()[1])
+    trans_id = int(call.data.split()[1])
 
-    # Get transaction data
-    cursor.execute('SELECT items, change FROM transactions WHERE transaction_id = ?', (id,))
-    data = cursor.fetchone()
-    items = json.loads(data[0])
+    # Get items in transaction
+    cursor.execute('SELECT stock_id, ItemName, change FROM transaction_items JOIN stocks ON transaction_items.stock_id = stocks.id WHERE transaction_id = ?', (trans_id,))
+    items = cursor.fetchall()
 
     # Validate data
     if not items:
-        bot.send_message(call.message.chat.id, 'There are no items in this transaction to remove.', reply_markup=transaction_markup(id))
+        bot.send_message(call.message.chat.id, 'There are no items in this transaction to remove.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
         return
     
     # Create markup
     markup = {}
     for item in items:
-        markup[f'{item}'] = {'callback_data': f'(remove_item) {id} {item}'}
+        markup[f'{item[1]}'] = {'callback_data': f'(remove_item) {trans_id} {item[0]}'}
 
-    bot.send_message(call.message.chat.id, 'Select item to remove from transaction.', reply_markup=quick_markup(markup, row_width=1))
+    bot.send_message(call.message.chat.id, 'Select item to remove from transaction.'+ transaction_info(trans_id, db), reply_markup=quick_markup(markup, row_width=1))
 
     
 
 # Removes item from transaction
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item)')
 def remove_item(call):
-    pass
+    bot.delete_message(call.message.chat.id, call.message.id)
 
+    # Get transaction id and stock id
+    trans_id = int(call.data.split()[1])
+    stock_id = int(call.data.split()[2])
+
+    # Get item name
+    cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
+    item = cursor.fetchone()[0]
+
+    # Update database
+    cursor.execute('DELETE FROM transaction_items WHERE transaction_id = ? AND stock_id = ?', (trans_id, stock_id))
+    db.commit()
+
+    bot.send_message(call.message.chat.id, f"'{item}' has been removed from transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
 
 
 

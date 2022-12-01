@@ -13,6 +13,8 @@ def transaction_info(id, db):
     for row in rows:
         items[row[0]] = row[1]
     reply = f'\n\nCurrent Transaction:\n\nType - {type}\nCustomer - {customer}\n\n'
+    if not items:
+        return reply + 'No items in current transaction.'
     for item in items:
         if items[item] > 0:
             reply = reply + f'{item} +{items[item]}\n'
