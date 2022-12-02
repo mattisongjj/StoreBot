@@ -4,8 +4,9 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import re
-import json
+import datetime
 from transactions import transaction_info, transaction_markup
+
 
 # Set API key
 API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
@@ -99,6 +100,7 @@ def view_item(call):
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND ItemName = ?', (call.message.chat.id, re.sub('(\(view\) )', '', call.data)))
     item = cursor.fetchone()
     bot.send_message(call.message.chat.id, f'No. of {item[0]} in store: {item[1]}')
+    send_index(call.message.chat)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'View Full Stock')
 def full_stock(call):
@@ -110,6 +112,7 @@ def full_stock(call):
     for item in items:
         reply = reply + f'{item[0]} x{item[1]}\n'
     bot.send_message(call.message.chat.id, reply)
+    send_index(call.message.chat)
     
 
     
@@ -462,7 +465,7 @@ def show_add_items(call):
     
     # If every items in store have been added to transactions
     if not markup:
-        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=transaction_markup(id))
+        bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=transaction_markup(id), parse_mode='HTML')
         return
 
     # If no items in transaction
@@ -471,7 +474,7 @@ def show_add_items(call):
         return
 
     # Query for item to be added
-    bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction." + transaction_info(id,db), reply_markup=quick_markup(markup, row_width=1))
+    bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction." + transaction_info(id,db), reply_markup=quick_markup(markup, row_width=1), parse_mode='HTML')
 
 
 
@@ -533,27 +536,27 @@ def add_new_qty(message, trans_id, stock_id, item, qty, increase):
         change = int(message.text)
         if change <= 0:
             bot.reply_to(message, 'Invalid Quantity. Quantity must be a positive number.')
-            bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
+            bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
             return
         if not increase and (qty - change < 0) :
             bot.reply_to(message, f"Insufficient '{item}' in store. Current quantity: {qty}")
-            bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
+            bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
             return
     except:
         bot.reply_to(message, 'Invalid Quantity. Quantity must be a number.')
-        bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
+        bot.send_message(message.chat.id, 'Error adding item to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
         return
 
     # Update database
     if increase:
         cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (? ,? ,? ,?)', (trans_id, stock_id, qty, change))
         db.commit()
-        bot.send_message(message.chat.id, f"x{change} '{item}' has been added to transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+        bot.send_message(message.chat.id, f"x{change} '{item}' has been added to transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
         return
     
     cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (? ,? ,? ,?)', (trans_id, stock_id, qty, -change))
     db.commit()
-    bot.send_message(message.chat.id, f"x{change} '{item}' has been added to transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+    bot.send_message(message.chat.id, f"x{change} '{item}' has been added to transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
     return
 
 
@@ -573,7 +576,7 @@ def show_remove_item(call):
 
     # Validate data
     if not items:
-        bot.send_message(call.message.chat.id, 'There are no items in this transaction to remove.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+        bot.send_message(call.message.chat.id, 'There are no items in this transaction to remove.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
         return
     
     # Create markup
@@ -581,7 +584,7 @@ def show_remove_item(call):
     for item in items:
         markup[f'{item[1]}'] = {'callback_data': f'(remove_item) {trans_id} {item[0]}'}
 
-    bot.send_message(call.message.chat.id, 'Select item to remove from transaction.'+ transaction_info(trans_id, db), reply_markup=quick_markup(markup, row_width=1))
+    bot.send_message(call.message.chat.id, 'Select item to remove from transaction.'+ transaction_info(trans_id, db), reply_markup=quick_markup(markup, row_width=1), parse_mode='HTML')
 
     
 
@@ -602,7 +605,7 @@ def remove_item(call):
     cursor.execute('DELETE FROM transaction_items WHERE transaction_id = ? AND stock_id = ?', (trans_id, stock_id))
     db.commit()
 
-    bot.send_message(call.message.chat.id, f"'{item}' has been removed from transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+    bot.send_message(call.message.chat.id, f"'{item}' has been removed from transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
 
 
 
@@ -623,13 +626,13 @@ def add_customer(message, trans_id):
     customer = message.text
     if not customer:
         bot.reply_to(message, 'Invalid Customer Name.')
-        bot.send_message(message.chat.id, 'Error adding customer to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id))
+        bot.send_message(message.chat.id, 'Error adding customer to transaction, choose an option to continue.' + transaction_info(trans_id,db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
         return
 
     # Update database
     cursor.execute('UPDATE transactions SET customer = ? WHERE id = ?', (customer, trans_id))
     db.commit()
-    bot.send_message(message.chat.id, f"'{customer}' has been set as customer for transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+    bot.send_message(message.chat.id, f"'{customer}' has been set as customer for transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
 
 
 
@@ -645,16 +648,75 @@ def remove_customer(call):
     cursor.execute('SELECT customer FROM transactions WHERE id = ?', (trans_id,))
     customer = cursor.fetchone()[0]
     if customer == 'NIL':
-        bot.send_message(call.message.chat.id, 'No customer in current transaction to remove.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+        bot.send_message(call.message.chat.id, 'No customer in current transaction to remove.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
         return
 
     # Remove customer
     cursor.execute('UPDATE transactions SET customer = ? WHERE id = ?', ('NIL', trans_id))
     db.commit()
 
-    bot.send_message(call.message.chat.id, f"'{customer}' has been removed as customer for transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id))
+    bot.send_message(call.message.chat.id, f"'{customer}' has been removed as customer for transaction." + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
 
 
+
+# Handles confirming of transaction
+@bot.callback_query_handler(func=lambda call:call.data.split()[0] == '(confirm_transaction)')
+def confirm_transaction_info(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+
+    # Validate transaction
+    cursor.execute('SELECT stock_id FROM transaction_items WHERE transaction_id = ?', (trans_id,))
+    if len(cursor.fetchall()) == 0:
+        bot.send_message(call.message.chat.id, 'Must have at least one item in transaction to confirm transaction.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
+        return
+    
+    # Check for customer
+    cursor.execute('SELECT customer FROM transactions WHERE id = ?', (trans_id,))
+    customer = cursor.fetchone()[0]
+
+    # Create markup
+    markup = quick_markup({'Confirm': {'callback_data': f'(confirmed_transaction) {trans_id}'},
+                            'Back': {'callback_data': f'(back_trans) {trans_id}'},}
+                            ,row_width=1)
+    if customer != 'NIL':
+        bot.send_message(call.message.chat.id, 'Confirm the following transaction?' + transaction_info(trans_id, db), reply_markup=markup, parse_mode='HTML')
+        return
+    bot.send_message(call.message.chat.id, 'Confirm the following transaction?\n(<b>NOTE</b>: No customer has been added)' + transaction_info(trans_id, db), reply_markup=markup, parse_mode='HTML')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirmed_transaction)')
+def confirm_transaction(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+    
+    # Get item changes
+    cursor.execute('SELECT stock_id, old_qty, change FROM transaction_items WHERE transaction_id = ?', (trans_id,))
+    changes = cursor.fetchall()
+
+    # Update item quantity
+    for change in changes:
+        cursor.execute('UPDATE stocks SET quantity = ? WHERE id = ?', (change[1] + change[2], change[0]))
+        db.commit()
+
+    # Confirm transaction
+    time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    cursor.execute('UPDATE transactions SET datetime = ?, confirmed = ? WHERE id = ?', (time, 'TRUE', trans_id))
+    db.commit()
+
+    bot.send_message(call.message.chat.id, '<b>New transaction added.</b>' + transaction_info(trans_id, db), parse_mode='HTML')
+    send_index(call.message.chat)
+
+
+
+## todo
+## Implement cancel transaction
+## Implement back button for transactions
+## Check for unconfirmed transaction when starting new transaction
 
 
 
