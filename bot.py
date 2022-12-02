@@ -26,7 +26,7 @@ def isadmin(chat, user):
     # Check if user is admin in chat
     member = bot.get_chat_member(chat.id, user.id)
     if member.status not in ['creator', 'administrator']:
-        bot.send_message(chat.id, 'Sorry you are not an administrator of this chat.')
+        bot.send_message(chat.id, 'Access only for administrators of this chat.')
         return False
     return True
 
@@ -408,6 +408,13 @@ def rename_transaction_type_db(message, id ,type):
 def open_new_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
+    # Check for existing transaction
+    cursor.execute('SELECT id FROM transactions WHERE store_id = ? AND confirmed = FALSE', (call.message.chat.id,))
+    existing_id = cursor.fetchone()
+    if existing_id:
+        bot.send_message(call.message.chat.id, '<b>Unconfirmed transaction found</b>\n\nConfirm or cancel transaction to start a new transaction.' + transaction_info(existing_id[0], db), reply_markup=transaction_markup(existing_id[0]), parse_mode='HTML')
+        return
+    
     # Get items in store
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
     items = cursor.fetchall()
@@ -420,18 +427,18 @@ def open_new_transaction(call):
     type_id=int(call.data.split()[1])
 
     # Add transaction to database
-    cursor.execute('INSERT INTO transactions (store_id, operator, customer, type_id) VALUES (?, ?, ?, ?)', (call.message.chat.id, call.from_user.username, 'NIL', type_id,))
+    cursor.execute('INSERT INTO transactions (store_id, operator, type_id) VALUES (?, ?, ?)', (call.message.chat.id, call.from_user.username, type_id,))
     db.commit()
 
     # Get transaction id
-    id = cursor.lastrowid
+    trans_id = cursor.lastrowid
 
     # Get name of transaction type
     cursor.execute('SELECT type FROM transaction_types WHERE id = ?', (type_id,))
     type = cursor.fetchone()[0]
 
     # Show transaction options
-    bot.send_message(call.message.chat.id, f"New transaction of type '{type}' opened, select one of the options to continue.", reply_markup=transaction_markup(id))
+    bot.send_message(call.message.chat.id, f"New transaction of type '{type}' opened. Choose an option to continue" + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
 
     
 
@@ -468,10 +475,8 @@ def show_add_items(call):
         bot.send_message(call.message.chat.id, "Every item in this store has already been added to transaction." + transaction_info(id, db), reply_markup=transaction_markup(id), parse_mode='HTML')
         return
 
-    # If no items in transaction
-    if not items:
-        bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction.\nNo items currently in transaction.", reply_markup=quick_markup(markup, row_width=1))
-        return
+    # Add back option
+    markup['Back'] = {'callback_data': f'(back_trans) {id}'}
 
     # Query for item to be added
     bot.send_message(call.message.chat.id, f"Select an item to add to '{type}' transaction." + transaction_info(id,db), reply_markup=quick_markup(markup, row_width=1), parse_mode='HTML')
@@ -496,10 +501,10 @@ def query_change_transaction(call):
     cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
     item = cursor.fetchone()[0]
 
+    # Create markup
+    markup = quick_markup({ 'Increase': {'callback_data': f'(increase_item) {trans_id} {stock_id}'}, 'Decrease': {'callback_data': f'(decrease_item) {trans_id} {stock_id}'}}, row_width=1)
     # Query for increase or decrease
-    bot.send_message(call.message.chat.id, f"Is quantity of '{item}' increased or decreased in '{type}' transaction?", reply_markup=quick_markup({ 'Increase': {'callback_data': f'(increase_item) {trans_id} {stock_id}'},
-                                                                                                                                                    'Decrease': {'callback_data': f'(decrease_item) {trans_id} {stock_id}'}
-                                                                                                                                               }, row_width=1))
+    bot.send_message(call.message.chat.id, f"Is quantity of '{item}' in stock increased or decreased in '{type}' transaction?", reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call:call.data.split()[0] in ['(increase_item)', '(decrease_item)'])
@@ -583,6 +588,9 @@ def show_remove_item(call):
     markup = {}
     for item in items:
         markup[f'{item[1]}'] = {'callback_data': f'(remove_item) {trans_id} {item[0]}'}
+    
+    # Add back option
+    markup['Back'] = {'callback_data': f'(back_trans) {trans_id}'}
 
     bot.send_message(call.message.chat.id, 'Select item to remove from transaction.'+ transaction_info(trans_id, db), reply_markup=quick_markup(markup, row_width=1), parse_mode='HTML')
 
@@ -660,7 +668,7 @@ def remove_customer(call):
 
 
 # Handles confirming of transaction
-@bot.callback_query_handler(func=lambda call:call.data.split()[0] == '(confirm_transaction)')
+@bot.callback_query_handler(func=lambda call:call.data.split()[0] == '(confirm)')
 def confirm_transaction_info(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
@@ -672,13 +680,18 @@ def confirm_transaction_info(call):
     if len(cursor.fetchall()) == 0:
         bot.send_message(call.message.chat.id, 'Must have at least one item in transaction to confirm transaction.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
         return
+    cursor.execute('SELECT * FROM transactions WHERE id = ? AND confirmed = TRUE', (trans_id,))
+    if cursor.fetchone():
+        bot.send_message(call.message.chat.id, 'This transaction has already been confirmed.')
+        send_index(call.message.chat)
+        return
     
     # Check for customer
     cursor.execute('SELECT customer FROM transactions WHERE id = ?', (trans_id,))
     customer = cursor.fetchone()[0]
 
     # Create markup
-    markup = quick_markup({'Confirm': {'callback_data': f'(confirmed_transaction) {trans_id}'},
+    markup = quick_markup({'Confirm': {'callback_data': f'(confirm_transaction) {trans_id}'},
                             'Back': {'callback_data': f'(back_trans) {trans_id}'},}
                             ,row_width=1)
     if customer != 'NIL':
@@ -687,13 +700,20 @@ def confirm_transaction_info(call):
     bot.send_message(call.message.chat.id, 'Confirm the following transaction?\n(<b>NOTE</b>: No customer has been added)' + transaction_info(trans_id, db), reply_markup=markup, parse_mode='HTML')
 
 
-@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirmed_transaction)')
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirm_transaction)')
 def confirm_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Get transaction id
     trans_id = int(call.data.split()[1])
     
+    # Validate transaction
+    cursor.execute('SELECT * FROM transactions WHERE id = ? AND confirmed = TRUE', (trans_id,))
+    if cursor.fetchone():
+        bot.send_message(call.message.chat.id, 'This transaction has already been confirmed.')
+        send_index(call.message.chat)
+        return
+
     # Get item changes
     cursor.execute('SELECT stock_id, old_qty, change FROM transaction_items WHERE transaction_id = ?', (trans_id,))
     changes = cursor.fetchall()
@@ -705,7 +725,7 @@ def confirm_transaction(call):
 
     # Confirm transaction
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-    cursor.execute('UPDATE transactions SET datetime = ?, confirmed = ? WHERE id = ?', (time, 'TRUE', trans_id))
+    cursor.execute('UPDATE transactions SET datetime = ?, confirmed = TRUE WHERE id = ?', (time, trans_id))
     db.commit()
 
     bot.send_message(call.message.chat.id, '<b>New transaction added.</b>' + transaction_info(trans_id, db), parse_mode='HTML')
@@ -713,10 +733,53 @@ def confirm_transaction(call):
 
 
 
-## todo
-## Implement cancel transaction
-## Implement back button for transactions
-## Check for unconfirmed transaction when starting new transaction
+
+# Handles cancellation of transaction
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(cancel)')
+def cancel_transaction_info(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+
+    # Create markup
+    markup = quick_markup({'Cancel': {'callback_data': f'(cancel_transaction) {trans_id}'},
+                            'Back': {'callback_data': f'(back_trans) {trans_id}'}},
+                            row_width=1)
+    bot.send_message(call.message.chat.id, 'Cancel the following transaction?' + transaction_info(trans_id, db), reply_markup=markup, parse_mode='HTML')
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(cancel_transaction)')
+def cancel_transaction(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+
+    # Save transaction information
+    info = transaction_info(trans_id, db)
+
+    # Update database
+    cursor.execute('DELETE FROM transactions WHERE id = ?', (trans_id,))
+    cursor.execute('DELETE FROM transaction_items WHERE transaction_id = ?', (trans_id,))
+    db.commit()
+
+    bot.send_message(call.message.chat.id, '<b>Transaction Cancelled.</b>' + info, parse_mode='HTML')
+    send_index(call.message.chat)
+
+
+
+
+# Handles back button for transactions
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(back_trans)')
+def back_trans(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get transaction id
+    trans_id = int(call.data.split()[1])
+
+    bot.send_message(call.message.chat.id, 'Choose an option to continue.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
+
+
 
 
 

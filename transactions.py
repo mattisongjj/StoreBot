@@ -12,14 +12,14 @@ def transaction_info(id, db):
     items = {}
     for row in rows:
         items[row[0]] = row[1]
-    reply = f'\n\n<u>Transaction Information</u>\n\nType - {type}\nCustomer - {customer}\n\n'
+    reply = f'\n\n<u>Transaction Information</u>\n\n<b>Type</b> - {type}\n<b>Customer</b> - {customer}\n\n<u>Items</u>\n'
     if not items:
         return reply + 'No items in current transaction.'
     for item in items:
         if items[item] > 0:
-            reply = reply + f'{item} +{items[item]}\n'
+            reply = reply + f'<b>{item}:</b> +{items[item]}\n'
         else:
-            reply = reply + f'{item} {items[item]}\n'
+            reply = reply + f'<b>{item}:</b> {items[item]}\n'
     return reply
 
 # Inline keyboard markup for transactions
@@ -28,6 +28,6 @@ def transaction_markup(id):
                             'Remove Items': {'callback_data': f'(select_remove_items) {id}'},
                             'Add/Change Customer (Optional)': {'callback_data': f'(add_customer) {id}'},
                             'Remove Customer': {'callback_data': f'(remove_customer) {id}'},
-                            'Confirm Transaction': {'callback_data': f'(confirm_transaction) {id}'},
+                            'Confirm Transaction': {'callback_data': f'(confirm) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
