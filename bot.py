@@ -143,7 +143,7 @@ def check_minimum_requirement(call):
     reply = '<b>Items below minimum requirement</b>\n\n'
 
     for item in items:
-        reply = reply + f'<b>{item[0]}</b> (Current Qty: {item[1]}, Required Quantity: {item[2]}, Deficit: {item[2] - item[1]})\n'
+        reply = reply + f'<u><b>{item[0]}</b></u>\n(Current Qty: {item[1]}, Required Quantity: {item[2]}, Deficit: {item[2] - item[1]})\n'
     
     bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
     send_index(call.message.chat)
@@ -183,9 +183,11 @@ def get_minimum(message, item):
         qty = int(message.text)
         if qty <= 0:
             bot.reply_to(message, 'Invalid Quantity')
+            send_index(message.chat)
             return
     except:
         bot.reply_to(message, 'Invalid Quantity')
+        send_index(message.chat)
         return
 
     msg = bot.reply_to(message, f"Reply to this message the minimum quantity of '{item}' required in store.\n(Reply '0' if item does not have a mimimum requirement)", reply_markup=types.ForceReply(True, 'Minimum quantity.'))
@@ -197,15 +199,26 @@ def add_item(message, item, qty):
         min = int(message.text)
         if min < 0:
             bot.reply_to(message, 'Invalid Quantity')
+            send_index(message.chat)
             return
     except:
         bot.reply_to(message, 'Invalid quantity')
+        send_index(message.chat)
         return
-    
+
     # Add item to database
     cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
     db.commit()
-    bot.send_message(message.chat.id, f'x{qty} {item} has been added to store. (Minimum requirement: {min})')
+    # Update transactions
+    stock_id = cursor.lastrowid
+    time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (message.chat.id, message.from_user.username, 3, time))
+    db.commit()
+    trans_id = cursor.lastrowid
+    cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (?, ?, 0, ?)', (trans_id, stock_id, qty))
+
+    bot.send_message(message.chat.id, f'x{qty} {item} has been added to store.\n(Minimum requirement: {min})')
+    bot.send_message(message.chat.id, '<b>New Transaction Added</b>' + transaction_info(trans_id,db), parse_mode='HTML')
     send_index(message.chat)
 
 
@@ -886,7 +899,7 @@ bot.infinity_polling()
 
 #todo
 # Back button for index
-# Add to transaction when new item is added
+# Remove item from store
 # Transaction history
 # Add contact
 # Private chat request
