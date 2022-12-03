@@ -36,7 +36,8 @@ def send_index(chat):
                 'Add/Remove/Rename Item': {'callback_data': 'Add/Remove/Rename Item'},
                 'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'},
-                'Edit Store Details': {'callback_data': 'Edit Store Details'}},
+                'Edit Store Details': {'callback_data': 'Edit Store Details'},
+                'Exit': {'callback_data': 'Exit'}},
                 row_width=1))
 
 
@@ -920,7 +921,10 @@ def back_index(call):
     send_index(call.message.chat)
 
 
-
+# Closes bot
+@bot.callback_query_handler(func=lambda call: call.data == 'Exit')
+def exit(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
 
 
 
