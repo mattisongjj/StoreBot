@@ -3,7 +3,6 @@ from telebot.util import quick_markup
 from telebot import types
 import sqlite3
 from sqlite3 import Error
-import re
 import datetime
 from transactions import transaction_info, transaction_markup
 
@@ -32,17 +31,13 @@ def isadmin(chat, user):
 
 def send_index(chat):
     # Send index options in chat
-    bot.send_message(chat.id, 'Choose an option', reply_markup=quick_markup({
+    bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({
                 'View Current Stock': {'callback_data': 'View Current Stock'},
-                'Add New Item': {'callback_data': 'Add New Item'},
-                'Rename Item': {'callback_data': 'Rename Item'},
+                'Add/Remove/Rename Item': {'callback_data': 'Add/Remove/Rename Item'},
                 'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'},
                 'Edit Store Details': {'callback_data': 'Edit Store Details'}},
                 row_width=1))
-
-
-
 
 
 
@@ -95,7 +90,7 @@ def view_stock(call):
         bot.send_message(call.message.chat.id, 'Store does not have any items.')
         return
     # Display options
-    options = {'View Full Stock': {'callback_data': 'View Full Stock'}, 'Check Minimum Requirement': {'callback_data': 'Check Minimum Requirement'}}
+    options = {'Back': {'callback_data': '(back_index)'}, 'View Full Stock': {'callback_data': 'View Full Stock'}, 'Check Minimum Requirement': {'callback_data': 'Check Minimum Requirement'}}
     for item in items:
         options[item[0]] = {'callback_data': f'(view) {item[1]}'}
     bot.send_message(call.message.chat.id, 'What would you like to view?', reply_markup=quick_markup(options, row_width=1))
@@ -150,6 +145,20 @@ def check_minimum_requirement(call):
 
 
 
+# Shows options to add/remove/rename items in store
+@bot.callback_query_handler(func=lambda call: call.data == 'Add/Remove/Rename Item')
+def add_remove_rename_options(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
+
+    # Create markup
+    markup = quick_markup({'Back': {'callback_data': '(back_index)'}, 'Add New Item': {'callback_data': 'Add New Item'}, 'Rename Item': {'callback_data': 'Rename Item'}, 'Remove Item': {'callback_data': 'Remove Item'}}, row_width=1)
+
+    bot.send_message(call.message.chat.id, 'Select an option.', reply_markup=markup)
+
 
 
 
@@ -158,10 +167,11 @@ def check_minimum_requirement(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Item')
 def new_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+
     # Ensure user is admin
     if not isadmin(call.message.chat, call.from_user):
         return
-    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new item.', parse_mode='HTML')
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new item.', reply_markup=types.ForceReply(True, 'Name of new item'),parse_mode='HTML')
     bot.register_next_step_handler(msg, get_total)
 
 def get_total(message):
@@ -169,12 +179,12 @@ def get_total(message):
     item = message.text
     if not item:
         bot.reply_to(message, 'Invalid item name.')
-    # Check database if item already exist
+    # Check database if item already exist in store
     cursor.execute('SELECT * FROM stocks WHERE store_id = ? AND ItemName = ?', (message.chat.id, item))
     if len(cursor.fetchall()) != 0:
         bot.reply_to(message, 'Item already exist in store.')
     # Get quantity
-    msg = bot.reply_to(message,'Quantity of item?', reply_markup=types.ForceReply(True, 'Quantity of item'))
+    msg = bot.reply_to(message, f'<b>Reply</b> to this message quantity of {item} added to store.', reply_markup=types.ForceReply(True, 'Quantity'), parse_mode='HTML')
     bot.register_next_step_handler(msg, get_minimum, item)
 
 def get_minimum(message, item):
@@ -190,10 +200,11 @@ def get_minimum(message, item):
         send_index(message.chat)
         return
 
-    msg = bot.reply_to(message, f"Reply to this message the minimum quantity of '{item}' required in store.\n(Reply '0' if item does not have a mimimum requirement)", reply_markup=types.ForceReply(True, 'Minimum quantity.'))
+    msg = bot.reply_to(message, f"<b>Reply</b> to this message the minimum quantity of '{item}' required in store.\n(Reply '0' if item does not have a mimimum requirement)", reply_markup=types.ForceReply(True, 'Minimum Quantity'), parse_mode='HTML')
     bot.register_next_step_handler(msg, add_item, item, qty)
 
 def add_item(message, item, qty):
+
     # Validate minimum
     try:
         min = int(message.text)
@@ -206,9 +217,10 @@ def add_item(message, item, qty):
         send_index(message.chat)
         return
 
-    # Add item to database
+    # Add item to databa
     cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
     db.commit()
+
     # Update transactions
     stock_id = cursor.lastrowid
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -218,7 +230,7 @@ def add_item(message, item, qty):
     cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (?, ?, 0, ?)', (trans_id, stock_id, qty))
 
     bot.send_message(message.chat.id, f'x{qty} {item} has been added to store.\n(Minimum requirement: {min})')
-    bot.send_message(message.chat.id, '<b>New Transaction Added</b>' + transaction_info(trans_id,db), parse_mode='HTML')
+    bot.send_message(message.chat.id, '<b>New Transaction Added</b>' + transaction_info(trans_id, db), parse_mode='HTML')
     send_index(message.chat)
 
 
@@ -235,14 +247,15 @@ def rename_item_query(call):
         return
 
     # Get current items in store
-    cursor.execute('SELECT ItemName, stock_id FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ?', (call.message.chat.id,))
     rows = cursor.fetchall()
     if len(rows) == 0:
-        bot.send_message(call.message.chat.id, 'There is currently no items in store.')
+        bot.send_message(call.message.chat.id, 'There is currently no items in store to rename.')
+        send_index(call.message.chat)
         return
 
     # Create markup
-    markup = {}
+    markup = {'Back': {'callback_data': 'Add/Remove/Rename Item'}}
     for item in rows:
         markup[item[0]] = {'callback_data': f'(rename_item) {item[1]}'}
 
@@ -250,16 +263,16 @@ def rename_item_query(call):
     bot.send_message(call.message.chat.id, 'Choose item to be renamed.', reply_markup=quick_markup(markup, row_width=1))
 
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename_item)')
-def new_itemname_query(call):
+def rename_item_query(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Get item information
     stock_id = int(call.data.split()[1])
-    cursor.execute('SELECT ItemName FROM stocks WHERE stock_id = ?', (stock_id,))
+    cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
     item = cursor.fetchone()[0]
 
     # Query for new name
-    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message new name of '{item}'.", parse_mode='HTML')
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message new name of '{item}'.", reply_markup=types.ForceReply(True, 'New Name'), parse_mode='HTML')
     bot.register_next_step_handler(msg, rename_item_db, stock_id, item)
 
 def rename_item_db(message, stock_id, item):
@@ -274,11 +287,73 @@ def rename_item_db(message, stock_id, item):
         return
     
     # Update database
-    cursor.execute('UPDATE stocks SET ItemName = ? WHERE stock_id = ?', (new_name, stock_id))
+    cursor.execute('UPDATE stocks SET ItemName = ? WHERE id = ?', (new_name, stock_id))
     db.commit()
 
     bot.send_message(message.chat.id, f"'{item}' renamed to '{new_name}'.")
     send_index(message.chat)
+
+
+
+# Handles removing of items
+@bot.callback_query_handler(func=lambda call: call.data == 'Remove Item')
+def remove_item_query(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Ensure user is admin
+    if not isadmin(call.message.chat, call.from_user):
+        return
+    
+    # Get items in store
+    cursor.execute('SELECT ItemName, id, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    rows = cursor.fetchall()
+    if len(rows) == 0:
+        bot.send_message(call.message.chat.id, 'There is currently no items in store to remove.')
+        send_index(call.message.chat)
+        return
+
+    # Create markup
+    markup = {'Back': {'callback_data': 'Add/Remove/Rename Item'}}
+    for item in rows:
+        markup[f'{item[0]} ({item[2]})'] = {'callback_data': f'(remove_item) {item[1]}'}
+    
+    # Query for item to be removed
+    bot.send_message(call.message.chat.id, f"Select an item to remove from store.", reply_markup=quick_markup(markup, row_width=1))
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item)')
+def remove_item(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get stock id
+    stock_id = int(call.data.split()[1])
+
+    # Get item name and quantity
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ?', (stock_id,))
+    row = cursor.fetchone()
+    item = row[0]
+    quantity = row[1]
+
+    # Remove item from store
+    cursor.execute('UPDATE stocks SET store_id = NULL WHERE id = ?', (stock_id,))
+    db.commit()
+
+    # Update transactions
+    time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (call.message.chat.id, call.from_user.username, 4, time))
+    db.commit()
+    trans_id = cursor.lastrowid
+    cursor.execute('INSERT INTO transaction_items (transaction_id, stock_id, old_qty, change) VALUES (?, ?, ?, ?)', (trans_id, stock_id, quantity, -quantity))
+    db.commit()
+
+
+    bot.send_message(call.message.chat.id, f"'{item}' has been removed from store.")
+    bot.send_message(call.message.chat.id, '<b>New Transaction Added</b>' + transaction_info(trans_id, db), parse_mode='HTML')
+    send_index(call.message.chat)
+
+
+
+
+
 
 
 
@@ -325,7 +400,7 @@ def new_type(call):
         return
     # Get type name
     bot.delete_message(call.message.chat.id, call.message.id)
-    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new transaction type', parse_mode='HTML')
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new transaction type', reply_markup=types.ForceReply(True, 'Name of new transaction type'),parse_mode='HTML')
     bot.register_next_step_handler(msg, add_type)
 
 def add_type(message):
@@ -421,7 +496,7 @@ def get_new_name(call):
     type = cursor.fetchone()[0]
 
     # Query for new name
-    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message the new name of '{type}' transaction type", parse_mode='HTML')
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message the new name of '{type}' transaction type", reply_markup=types.ForceReply(True, 'New Name'), parse_mode='HTML')
     bot.register_next_step_handler(msg, rename_transaction_type_db, id, type)
 
 def rename_transaction_type_db(message, id ,type):
@@ -571,10 +646,10 @@ def query_quantity_transactions(call):
 
     # Query for quantity
     if call.data.split()[0] == '(increase_item)':
-        msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item} increased in '{type}' transaction.", parse_mode='HTML')
+        msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item} increased in '{type}' transaction.", reply_markup=types.ForceReply(True, 'Quantity Increased'), parse_mode='HTML')
         bot.register_next_step_handler(msg, add_new_qty, trans_id, stock_id, item, qty, True)
         return
-    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item} decreased in '{type}' transaction.", parse_mode='HTML')
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item} decreased in '{type}' transaction.", reply_markup=types.ForceReply(True, 'Quantity Decreased'), parse_mode='HTML')
     bot.register_next_step_handler(msg, add_new_qty, trans_id, stock_id, item, qty, False)
 
 
@@ -670,7 +745,7 @@ def query_customer(call):
     trans_id = int(call.data.split()[1])
 
     # Query for customer name
-    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message name of customer.", parse_mode='HTML')
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message name of customer.", reply_markup=types.ForceReply(True, 'Customer Name'), parse_mode='HTML')
     bot.register_next_step_handler(msg, add_customer, trans_id)
 
 def add_customer(message, trans_id):
@@ -838,6 +913,13 @@ def back_trans(call):
     bot.send_message(call.message.chat.id, 'Choose an option to continue.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
 
 
+# Handles back button for index
+@bot.callback_query_handler(func=lambda call: call.data == '(back_index)')
+def back_index(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    send_index(call.message.chat)
+
+
 
 
 
@@ -864,7 +946,7 @@ def create_store(message):
         return
     
     # Prompt user for store name
-    msg = bot.reply_to(message,'What would you like to name your store?', reply_markup=types.ForceReply(True, 'Store Name'))
+    msg = bot.reply_to(message, '<b>Reply</b> to this message name of your store.\n(Your store name is used for other users to find your store)', reply_markup=types.ForceReply(True, 'Name of Store'), parse_mode='HTML')
     bot.register_next_step_handler(msg, created_store)
 
 def created_store(message):
@@ -897,9 +979,8 @@ bot.infinity_polling()
 
 
 
-#todo
-# Back button for index
-# Remove item from store
+# Add Categories
+# Add Close button
 # Transaction history
 # Add contact
 # Private chat request
