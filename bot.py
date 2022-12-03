@@ -41,6 +41,16 @@ def send_index(chat):
                 'Edit Store Details': {'callback_data': 'Edit Store Details'}},
                 row_width=1))
 
+
+
+
+
+
+
+
+
+
+
     
 # Handle /start and /help commands
 @bot.message_handler(commands=['start', 'help'])
@@ -73,49 +83,70 @@ def index(message):
 
 
 
-
-
-
-
-# Handles viewing of stock
+# Handles viewing of stock/checking of minimum requirement
 @bot.callback_query_handler(func=lambda call: call.data == 'View Current Stock')
 def view_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+
     # Query database for items
-    cursor.execute('SELECT ItemName FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
     if len(items) == 0:
         bot.send_message(call.message.chat.id, 'Store does not have any items.')
         return
     # Display options
-    options = {'View Full Stock': {'callback_data': 'View Full Stock'}}
+    options = {'View Full Stock': {'callback_data': 'View Full Stock'}, 'Check Minimum Requirement': {'callback_data': 'Check Minimum Requirement'}}
     for item in items:
-        options[item[0]] = {'callback_data': f'(view) {item[0]}'}
+        options[item[0]] = {'callback_data': f'(view) {item[1]}'}
     bot.send_message(call.message.chat.id, 'What would you like to view?', reply_markup=quick_markup(options, row_width=1))
 
-@bot.callback_query_handler(func=lambda call: '(view)' == call.data.split()[0])
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(view)')
 def view_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get stock id
+    stock_id = int(call.data.split()[1])
+
     # Query database
-    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND ItemName = ?', (call.message.chat.id, re.sub('(\(view\) )', '', call.data)))
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ?', (stock_id,))
     item = cursor.fetchone()
-    bot.send_message(call.message.chat.id, f'No. of {item[0]} in store: {item[1]}')
+    bot.send_message(call.message.chat.id, f'Quantity of {item[0]} in store: {item[1]}')
     send_index(call.message.chat)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'View Full Stock')
 def full_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+
     # Query database for items
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
-    reply = 'Total Stock:\n'
+    reply = '<b>Total Stock</b>\n\n'
     for item in items:
         reply = reply + f'{item[0]} x{item[1]}\n'
-    bot.send_message(call.message.chat.id, reply)
+    bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
     send_index(call.message.chat)
     
 
+@bot.callback_query_handler(func=lambda call: call.data == 'Check Minimum Requirement')
+def check_minimum_requirement(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Query for items below minimum requirement
+    cursor.execute('SELECT ItemName, Quantity, Min_req FROM stocks WHERE store_id = ? AND Quantity < Min_req', (call.message.chat.id,))
+    items = cursor.fetchall()
+    if not items:
+        bot.send_message(call.message.chat.id, 'No items in store are below the required amount.')
+        send_index(call.message.chat)
+        return
+
+    # Create reply
+    reply = '<b>Items below minimum requirement</b>\n\n'
+
+    for item in items:
+        reply = reply + f'<b>{item[0]}</b> (Current Qty: {item[1]}, Required Quantity: {item[2]}, Deficit: {item[2] - item[1]})\n'
     
+    bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
+    send_index(call.message.chat)
 
 
 
@@ -715,20 +746,34 @@ def confirm_transaction(call):
         return
 
     # Get item changes
-    cursor.execute('SELECT stock_id, old_qty, change FROM transaction_items WHERE transaction_id = ?', (trans_id,))
+    cursor.execute('SELECT stock_id, old_qty, change, ItemName, Min_req FROM transaction_items JOIN stocks ON transaction_items.stock_id = stocks.id WHERE transaction_id = ?', (trans_id,))
     changes = cursor.fetchall()
 
-    # Update item quantity
+    # Update item quantity, saving items that go below minimum requirement
+    below_minreq = []
     for change in changes:
-        cursor.execute('UPDATE stocks SET quantity = ? WHERE id = ?', (change[1] + change[2], change[0]))
+        new_qty = change[1] + change[2]
+        if new_qty < change[4]:
+            below_minreq.append((change[3], new_qty, change[4]))
+        cursor.execute('UPDATE stocks SET quantity = ? WHERE id = ?', (new_qty, change[0]))
         db.commit()
+
 
     # Confirm transaction
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     cursor.execute('UPDATE transactions SET datetime = ?, confirmed = TRUE WHERE id = ?', (time, trans_id))
     db.commit()
-
     bot.send_message(call.message.chat.id, '<b>New transaction added.</b>' + transaction_info(trans_id, db), parse_mode='HTML')
+
+    # Notify user of items belows minimum requirement
+    if below_minreq:
+        reply = '<b>NOTE: New items from transaction below minimum requirement</b>\n\n'
+        for item in below_minreq:
+            reply = reply + f'<b>{item[0]}</b> (Current Qty: {item[1]}, Required Quantity: {item[2]}, Deficit: {item[2] - item[1]})\n'
+        bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
+        send_index(call.message.chat)
+        return
+
     send_index(call.message.chat)
 
 
@@ -835,3 +880,13 @@ bot.load_next_step_handlers
 
 # Constantly check for new messages
 bot.infinity_polling()
+
+
+
+
+#todo
+# Back button for index
+# Add to transaction when new item is added
+# Transaction history
+# Add contact
+# Private chat request
