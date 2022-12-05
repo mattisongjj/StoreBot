@@ -85,7 +85,7 @@ def view_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Query database for items
-    cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ? AND is_deleted = FALSE ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
     if len(items) == 0:
         bot.send_message(call.message.chat.id, 'Store does not have any items.')
@@ -104,7 +104,7 @@ def view_item(call):
     stock_id = int(call.data.split()[1])
 
     # Query database
-    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ?', (stock_id,))
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ? AND is_deleted = FALSE', (stock_id,))
     item = cursor.fetchone()
     bot.send_message(call.message.chat.id, f'Quantity of {item[0]} in store: {item[1]}')
     send_index(call.message.chat)
@@ -114,7 +114,7 @@ def full_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Query database for items
-    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? ORDER BY ItemName ASC', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE ORDER BY ItemName ASC', (call.message.chat.id,))
     items = cursor.fetchall()
     reply = '<b>Total Stock</b>\n\n'
     for item in items:
@@ -128,7 +128,7 @@ def check_minimum_requirement(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Query for items below minimum requirement
-    cursor.execute('SELECT ItemName, Quantity, Min_req FROM stocks WHERE store_id = ? AND Quantity < Min_req', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, Quantity, Min_req FROM stocks WHERE store_id = ? AND is_deleted = FALSE AND Quantity < Min_req', (call.message.chat.id,))
     items = cursor.fetchall()
     if not items:
         bot.send_message(call.message.chat.id, 'No items in store are below the required amount.')
@@ -181,7 +181,7 @@ def get_total(message):
     if not item:
         bot.reply_to(message, 'Invalid item name.')
     # Check database if item already exist in store
-    cursor.execute('SELECT * FROM stocks WHERE store_id = ? AND ItemName = ?', (message.chat.id, item))
+    cursor.execute('SELECT * FROM stocks WHERE store_id = ? AND ItemName = ? AND is_deleted = FALSE', (message.chat.id, item))
     if len(cursor.fetchall()) != 0:
         bot.reply_to(message, 'Item already exist in store.')
     # Get quantity
@@ -218,12 +218,18 @@ def add_item(message, item, qty):
         send_index(message.chat)
         return
 
-    # Add item to databa
-    cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
-    db.commit()
+    # Check is item has been deleted before
+    cursor.execute('SELECT id FROM stocks WHERE store_id = ? AND ItemName = ? AND is_deleted = TRUE', (message.chat.id, item))
+    try:
+        stock_id = cursor.fetchone()[0]
+        cursor.execute('UPDATE stocks SET quantity = ?, Min_req = ?, is_deleted = FALSE WHERE id = ?', (qty, min, stock_id))
+        db.commit()
+    except:
+        cursor.execute('INSERT INTO stocks (store_id, ItemName, Quantity, Min_req) VALUES (?, ?, ?, ?)', (message.chat.id, item, qty, min))
+        db.commit()
+        stock_id = cursor.lastrowid
 
     # Update transactions
-    stock_id = cursor.lastrowid
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (message.chat.id, message.from_user.username, 3, time))
     db.commit()
@@ -248,7 +254,7 @@ def rename_item_query(call):
         return
 
     # Get current items in store
-    cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     rows = cursor.fetchall()
     if len(rows) == 0:
         bot.send_message(call.message.chat.id, 'There is currently no items in store to rename.')
@@ -282,11 +288,12 @@ def rename_item_db(message, stock_id, item):
     if not new_name:
         bot.reply_to(message, 'Invalid item name')
         return
-    cursor.execute('SELECT * FROM stocks WHERE ItemName = ? AND store_id = ?', (new_name, message.chat.id))
+    cursor.execute('SELECT * FROM stocks WHERE ItemName = ? AND store_id = ? AND is_deleted = FALSE', (new_name, message.chat.id))
     if len(cursor.fetchall()) > 0:
         bot.reply_to(message, 'This item is already in store')
+        send_index(message.chat)
         return
-    
+
     # Update database
     cursor.execute('UPDATE stocks SET ItemName = ? WHERE id = ?', (new_name, stock_id))
     db.commit()
@@ -306,7 +313,7 @@ def remove_item_query(call):
         return
     
     # Get items in store
-    cursor.execute('SELECT ItemName, id, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, id, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     rows = cursor.fetchall()
     if len(rows) == 0:
         bot.send_message(call.message.chat.id, 'There is currently no items in store to remove.')
@@ -335,7 +342,7 @@ def remove_item(call):
     quantity = row[1]
 
     # Remove item from store
-    cursor.execute('UPDATE stocks SET store_id = NULL WHERE id = ?', (stock_id,))
+    cursor.execute('UPDATE stocks SET is_deleted = TRUE WHERE id = ?', (stock_id,))
     db.commit()
 
     # Update transactions
@@ -536,7 +543,7 @@ def open_new_transaction(call):
         return
     
     # Get items in store
-    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     items = cursor.fetchall()
 
     # Ensure at least one item
@@ -581,7 +588,7 @@ def show_add_items(call):
         items[row[0]] = row[1]
     
     # Get items in store
-    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     rows = cursor.fetchall()
 
     # Show items not in transaction
@@ -984,7 +991,6 @@ bot.infinity_polling()
 
 
 # Add Categories
-# Add Close button
 # Transaction history
 # Add contact
 # Private chat request
