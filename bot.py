@@ -989,7 +989,7 @@ bot.infinity_polling()
 
 
 
-
+# Implement is_deleted with renaming
 # Add Categories
 # Transaction history
 # Add contact
