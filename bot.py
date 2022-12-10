@@ -4,6 +4,7 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import datetime
+from calendar import month_name
 from transactions import transaction_info, transaction_markup
 
 
@@ -33,7 +34,7 @@ def send_index(chat):
     # Send index options in chat
     bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({
                 'View Current Stock': {'callback_data': 'View Current Stock'},
-                'Add/Remove/Rename Item': {'callback_data': 'Add/Remove/Rename Item'},
+                'Manage Items': {'callback_data': 'Manage Items'},
                 'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'},
                 'Edit Store Details': {'callback_data': 'Edit Store Details'},
@@ -146,8 +147,8 @@ def check_minimum_requirement(call):
 
 
 
-# Shows options to add/remove/rename items in store
-@bot.callback_query_handler(func=lambda call: call.data == 'Add/Remove/Rename Item')
+# Shows options to manange items in store
+@bot.callback_query_handler(func=lambda call: call.data == 'Manage Items')
 def add_remove_rename_options(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
@@ -262,7 +263,7 @@ def rename_item_query(call):
         return
 
     # Create markup
-    markup = {'Back': {'callback_data': 'Add/Remove/Rename Item'}}
+    markup = {'Back': {'callback_data': 'Manage Items'}}
     for item in rows:
         markup[item[0]] = {'callback_data': f'(rename_item) {item[1]}'}
 
@@ -321,7 +322,7 @@ def remove_item_query(call):
         return
 
     # Create markup
-    markup = {'Back': {'callback_data': 'Add/Remove/Rename Item'}}
+    markup = {'Back': {'callback_data': 'Manage Items'}}
     for item in rows:
         markup[f'{item[0]} ({item[2]})'] = {'callback_data': f'(remove_item) {item[1]}'}
     
@@ -376,6 +377,7 @@ def choose_type(call):
 
     # Add default types
     types = {
+        'Back': {'callback_data': '(back_index)'},
         'Add New Transaction Type': {'callback_data': 'Add New Transaction Type'},
         'Remove Transaction Type': {'callback_data': 'Remove Transaction Type'},
         'Rename Transaction Type': {'callback_data': 'Rename Transaction Type'},
@@ -384,7 +386,7 @@ def choose_type(call):
         }
     
     # Get additional transaction types from store
-    cursor.execute('SELECT type, id FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT type, id FROM transaction_types WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     rows = cursor.fetchall()
     for row in rows:
         types[row[0]] = {'callback_data': f'(n_trans) {row[1]}'}
@@ -414,13 +416,20 @@ def new_type(call):
 def add_type(message):
     type = message.text
     # Validate type
-    cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ?', (message.chat.id, type))
+    cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ? AND is_deleted = FALSE', (message.chat.id, type))
     if len(cursor.fetchall()) != 0 or not type:
         bot.reply_to(message, 'Invalid type name.')
         return
-    # Add type to database
-    cursor.execute('INSERT INTO transaction_types (store_id, type) VALUES (?, ?)', (message.chat.id, type))
-    db.commit()
+    # Check if transaction type has been deleted before
+    cursor.execute('SELECT id FROM transaction_types WHERE store_id = ? AND type = ? AND is_deleted = TRUE', (message.chat.id, type))
+    try:
+        deleted_id = cursor.fetchone()[0]
+        cursor.execute('UPDATE transaction_types SET is_deleted = FALSE WHERE id = ?', (deleted_id,))
+        db.commit()
+    except:
+        # Add type to database
+        cursor.execute('INSERT INTO transaction_types (store_id, type) VALUES (?, ?)', (message.chat.id, type))
+        db.commit()
     bot.reply_to(message, 'New type successfully added.')
     send_index(message.chat)
 
@@ -439,7 +448,7 @@ def remove_type(call):
         return
 
     # Get transaction types
-    cursor.execute('SELECT type, id FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT type, id FROM transaction_types WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     types = cursor.fetchall()
 
     # Ensure that created types exist
@@ -467,7 +476,7 @@ def remove_type_db(call):
     type = cursor.fetchone()[0]
 
     # Update database
-    cursor.execute('DELETE FROM transaction_types WHERE id = ?', (id,))
+    cursor.execute('UPDATE transaction_types SET is_deleted = TRUE WHERE id = ?', (id,))
     db.commit()
     bot.send_message(call.message.chat.id, f"Transaction type '{type}' removed.")
     send_index(call.message.chat)
@@ -480,7 +489,7 @@ def rename_transaction_type(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Get transaction types
-    cursor.execute('SELECT id, type FROM transaction_types WHERE store_id = ?', (call.message.chat.id,))
+    cursor.execute('SELECT id, type FROM transaction_types WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
     types = cursor.fetchall()
 
     if len(types) == 0:
@@ -515,9 +524,10 @@ def rename_transaction_type_db(message, id ,type):
         bot.reply_to(message, 'Invalid type name.')
         return
 
-    cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ?', (message.chat.id, new_name))
+    cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ? AND is_deleted = FALSE', (message.chat.id, new_name))
     if len(cursor.fetchall()) > 0:
         bot.reply_to(message, f'{new_name} transaction type has already been added to store.')
+        send_index(message.chat)
         return
 
     # Update database
@@ -921,6 +931,141 @@ def back_trans(call):
     bot.send_message(call.message.chat.id, 'Choose an option to continue.' + transaction_info(trans_id, db), reply_markup=transaction_markup(trans_id), parse_mode='HTML')
 
 
+
+
+
+
+
+
+# Handles viewing of transaction history
+@bot.callback_query_handler(func=lambda call: call.data == 'View Transaction History')
+def query_time_period(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Create markup
+    markup = quick_markup(
+        {'Back': {'callback_data': '(back_index)'},
+        'Day': {'callback_data': '(hist_time) day'},
+        'Month': {'callback_data': '(hist_time) month'},
+        'Year': {'callback_data': '(hist_time) year'},
+        }, row_width=1
+    )
+
+    bot.send_message(call.message.chat.id, 'Select a time period for transaction history viewing', reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(hist_time)')
+def query_time_period2(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get time period
+    time_period = call.data.split()[1]
+
+    if time_period == 'day':
+        msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the date for transaction history viewing in the format (DD-MM-YYYY).\n(<b>For example</b>: 21-11-2022)', parse_mode='HTML')
+        bot.register_next_step_handler(msg, query_history_item, time_period)
+    elif time_period == 'month':
+        msg = bot.send_message(call.message.chat.id, "<b>Reply</b> to this message the month and year for transaction history viewing in the format (MM-YYYY).\n(<b>For example</b>: '06-2021' for June 2021)", parse_mode='HTML')
+        bot.register_next_step_handler(msg, query_history_item, time_period)
+    else: 
+        msg = bot.send_message(call.message.chat.id, "<b>Reply</b> to this message the year for transaction history viewing.\n(<b>For example</b>: '2022'.)", parse_mode='HTML')
+        bot.register_next_step_handler(msg, query_history_item, time_period)
+
+def query_history_item(message, time_period):
+    # Validate time period
+    message_data = message.text
+    if not message_data:
+        bot.reply_to(message, 'Invalid time period.')
+        send_index(message.chat)
+        return
+    # Validate day
+    if time_period == 'day':
+        try:
+            ddmmyyyy = list(map(int, message_data.split('-')))
+            date = datetime.datetime(year=ddmmyyyy[2], month=ddmmyyyy[1], day=ddmmyyyy[0]).strftime('%Y-%m-%d')
+        except:
+            bot.reply_to(message, 'Invalid date, ensure to reply a valid date in the format (DD-MM-YYYY).')
+            send_index(message.chat)
+            return
+        # Get items in store
+        cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
+        items = cursor.fetchall()
+        if not items:
+            bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
+            send_index(message.chat)
+            return
+        # Create markup
+        markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_day) all {date}'}}
+        for item in items:
+            markup[item[1]] = {'callback_data': f'(hist_item_day) {item[0]} {date}'}
+        bot.send_message(message.chat.id, f'Select an item for transactions on {date}', reply_markup=quick_markup(markup, row_width=1))
+    # Validate month
+    elif time_period == 'month':
+        try:
+            mmyyyy = list(map(int, message_data.split('-')))
+            month = datetime.datetime(year=mmyyyy[1], month=mmyyyy[0], day=1).strftime('%Y-%m-%d')
+        except:
+            bot.reply_to(message, 'Invalid month ensure to reply a number')
+            send_index(message.chat)
+            return
+        # Get items in store
+        cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
+        items = cursor.fetchall()
+        if not items:
+            bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
+            send_index(message.chat)
+            return
+        # Create markup
+        markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_month) all {month}'}}
+        for item in items:
+            markup[item[1]] = {'callback_data': f'(hist_item_month) {item[0]} {month}'}
+        bot.send_message(message.chat.id, f'Select an item for transactions during {month_name[mmyyyy[0]]} {mmyyyy[1]}', reply_markup=quick_markup(markup, row_width=1))
+    # Validate year
+    else:
+        try:
+            if len(message_data) != 4:
+                bot.reply_to(message, 'Invalid year ensure to reply a 4 digit number.')
+                return
+            year = int(message_data)
+        except:
+            bot.reply_to(message, 'Invalid month ensure to reply a number')
+            send_index(message.chat)
+            return
+        # Get items in store
+        cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
+        items = cursor.fetchall()
+        if not items:
+            bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
+            send_index(message.chat)
+            return
+        # Create markup
+        markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_year) all {year}'}}
+        for item in items:
+            markup[item[1]] = {'callback_data': f'(hist_item_year) {item[0]} {year}'}
+        bot.send_message(message.chat.id, f'Select an item for transactions during the year {year}', reply_markup=quick_markup(markup, row_width=1))
+
+
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] in ['(hist_item_day)', '(hist_item_month)', '(hist_item_year)'])
+def test(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    print(call.data)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Handles back button for index
 @bot.callback_query_handler(func=lambda call: call.data == '(back_index)')
 def back_index(call):
@@ -988,8 +1133,6 @@ bot.load_next_step_handlers
 bot.infinity_polling()
 
 
-
-# Implement is_deleted with renaming
 # Add Categories
 # Transaction history
 # Add contact
