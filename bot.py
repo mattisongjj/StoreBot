@@ -17,7 +17,6 @@ try:
     db = sqlite3.connect('stores.db', check_same_thread=False)
 except Error as e:
     print(f"Error '{e}' occured when establishing connection to database")
-cursor = db.cursor()
 
 
 
@@ -53,6 +52,7 @@ def send_index(chat):
 @bot.message_handler(commands=['start', 'help'])
 def index(message):
 # Start bot
+    cursor = db.cursor()
 
     # Bot was started in a group chat
     if message.chat.type == 'group':
@@ -84,6 +84,7 @@ def index(message):
 @bot.callback_query_handler(func=lambda call: call.data == 'View Current Stock')
 def view_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Query database for items
     cursor.execute('SELECT ItemName, id FROM stocks WHERE store_id = ? AND is_deleted = FALSE ORDER BY ItemName ASC', (call.message.chat.id,))
@@ -100,6 +101,7 @@ def view_stock(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(view)')
 def view_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get stock id
     stock_id = int(call.data.split()[1])
@@ -113,6 +115,7 @@ def view_item(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'View Full Stock')
 def full_stock(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Query database for items
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE ORDER BY ItemName ASC', (call.message.chat.id,))
@@ -127,6 +130,7 @@ def full_stock(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'Check Minimum Requirement')
 def check_minimum_requirement(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Query for items below minimum requirement
     cursor.execute('SELECT ItemName, Quantity, Min_req FROM stocks WHERE store_id = ? AND is_deleted = FALSE AND Quantity < Min_req', (call.message.chat.id,))
@@ -177,6 +181,8 @@ def new_item(call):
     bot.register_next_step_handler(msg, get_total)
 
 def get_total(message):
+    cursor = db.cursor()
+
     # Ensure message is text
     item = message.text
     if not item:
@@ -206,6 +212,7 @@ def get_minimum(message, item):
     bot.register_next_step_handler(msg, add_item, item, qty)
 
 def add_item(message, item, qty):
+    cursor = db.cursor()
 
     # Validate minimum
     try:
@@ -249,6 +256,7 @@ def add_item(message, item, qty):
 @bot.callback_query_handler(func=lambda call: call.data == 'Rename Item')
 def rename_item_query(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Ensure user is admin
     if not isadmin(call.message.chat, call.from_user):
@@ -273,6 +281,7 @@ def rename_item_query(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename_item)')
 def rename_item_query(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get item information
     stock_id = int(call.data.split()[1])
@@ -284,6 +293,8 @@ def rename_item_query(call):
     bot.register_next_step_handler(msg, rename_item_db, stock_id, item)
 
 def rename_item_db(message, stock_id, item):
+    cursor = db.cursor()
+
     # Validate new name
     new_name = message.text
     if not new_name:
@@ -308,6 +319,7 @@ def rename_item_db(message, stock_id, item):
 @bot.callback_query_handler(func=lambda call: call.data == 'Remove Item')
 def remove_item_query(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Ensure user is admin
     if not isadmin(call.message.chat, call.from_user):
@@ -332,6 +344,7 @@ def remove_item_query(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item)')
 def remove_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get stock id
     stock_id = int(call.data.split()[1])
@@ -374,6 +387,7 @@ def remove_item(call):
 # Handles quantity adjustment/new transactions
 @bot.callback_query_handler(func=lambda call: call.data == 'Adjust Qty')
 def choose_type(call):
+    cursor = db.cursor()
 
     # Add default types
     types = {
@@ -415,6 +429,8 @@ def new_type(call):
 
 def add_type(message):
     type = message.text
+    cursor = db.cursor()
+
     # Validate type
     cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ? AND is_deleted = FALSE', (message.chat.id, type))
     if len(cursor.fetchall()) != 0 or not type:
@@ -440,8 +456,8 @@ def add_type(message):
 # Handles removal of transaction type
 @bot.callback_query_handler(func=lambda call: call.data == 'Remove Transaction Type')
 def remove_type(call):
-
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Ensure user is admin
     if not isadmin(call.message.chat, call.from_user):
@@ -468,6 +484,7 @@ def remove_type(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(del_type)')
 def remove_type_db(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     id = int(call.data.split()[1])
 
@@ -487,6 +504,7 @@ def remove_type_db(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'Rename Transaction Type')
 def rename_transaction_type(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction types
     cursor.execute('SELECT id, type FROM transaction_types WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
@@ -506,6 +524,7 @@ def rename_transaction_type(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(rename_type)')
 def get_new_name(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction type id and name
     id = int(call.data.split()[1])
@@ -517,6 +536,7 @@ def get_new_name(call):
     bot.register_next_step_handler(msg, rename_transaction_type_db, id, type)
 
 def rename_transaction_type_db(message, id ,type):
+    cursor = db.cursor()
 
     # Valdiate new name
     new_name = message.text
@@ -544,6 +564,7 @@ def rename_transaction_type_db(message, id ,type):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(n_trans)')
 def open_new_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Check for existing transaction
     cursor.execute('SELECT id FROM transactions WHERE store_id = ? AND confirmed = FALSE', (call.message.chat.id,))
@@ -585,6 +606,7 @@ def open_new_transaction(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_add_items)')
 def show_add_items(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get current transaction data
     id = int(call.data.split()[1])
@@ -625,6 +647,7 @@ def show_add_items(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_item)')
 def query_change_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id and stock id from call
     trans_id = int(call.data.split()[1])
@@ -647,6 +670,7 @@ def query_change_transaction(call):
 @bot.callback_query_handler(func=lambda call:call.data.split()[0] in ['(increase_item)', '(decrease_item)'])
 def query_quantity_transactions(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id and stock id from call
     trans_id = int(call.data.split()[1])
@@ -673,6 +697,8 @@ def query_quantity_transactions(call):
 
 
 def add_new_qty(message, trans_id, stock_id, item, qty, increase):
+    cursor = db.cursor()
+
     # Validate quantity
     try:
         change = int(message.text)
@@ -708,6 +734,7 @@ def add_new_qty(message, trans_id, stock_id, item, qty, increase):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_remove_items)')
 def show_remove_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id
     trans_id = int(call.data.split()[1])
@@ -737,6 +764,7 @@ def show_remove_item(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item)')
 def remove_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id and stock id
     trans_id = int(call.data.split()[1])
@@ -767,6 +795,8 @@ def query_customer(call):
     bot.register_next_step_handler(msg, add_customer, trans_id)
 
 def add_customer(message, trans_id):
+    cursor = db.cursor()
+
     # Validate customer name
     customer = message.text
     if not customer:
@@ -785,6 +815,7 @@ def add_customer(message, trans_id):
 @bot.callback_query_handler(func= lambda call: call.data.split()[0] == '(remove_customer)')
 def remove_customer(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id
     trans_id = int(call.data.split()[1])
@@ -808,6 +839,7 @@ def remove_customer(call):
 @bot.callback_query_handler(func=lambda call:call.data.split()[0] == '(confirm)')
 def confirm_transaction_info(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id
     trans_id = int(call.data.split()[1])
@@ -840,6 +872,7 @@ def confirm_transaction_info(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirm_transaction)')
 def confirm_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id
     trans_id = int(call.data.split()[1])
@@ -902,6 +935,7 @@ def cancel_transaction_info(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(cancel_transaction)')
 def cancel_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
     # Get transaction id
     trans_id = int(call.data.split()[1])
@@ -971,6 +1005,8 @@ def query_time_period2(call):
         bot.register_next_step_handler(msg, query_history_item, time_period)
 
 def query_history_item(message, time_period):
+    cursor = db.cursor()
+
     # Validate time period
     message_data = message.text
     if not message_data:
@@ -981,7 +1017,7 @@ def query_history_item(message, time_period):
     if time_period == 'day':
         try:
             ddmmyyyy = list(map(int, message_data.split('-')))
-            date = datetime.datetime(year=ddmmyyyy[2], month=ddmmyyyy[1], day=ddmmyyyy[0]).strftime('%Y-%m-%d')
+            date = datetime.datetime(year=ddmmyyyy[2], month=ddmmyyyy[1], day=ddmmyyyy[0]).strftime('%d-%m-%Y')
         except:
             bot.reply_to(message, 'Invalid date, ensure to reply a valid date in the format (DD-MM-YYYY).')
             send_index(message.chat)
@@ -1002,7 +1038,7 @@ def query_history_item(message, time_period):
     elif time_period == 'month':
         try:
             mmyyyy = list(map(int, message_data.split('-')))
-            month = datetime.datetime(year=mmyyyy[1], month=mmyyyy[0], day=1).strftime('%Y-%m-%d')
+            month = datetime.datetime(year=mmyyyy[1], month=mmyyyy[0], day=1).strftime('%d-%m-%Y')
         except:
             bot.reply_to(message, 'Invalid month ensure to reply a number')
             send_index(message.chat)
@@ -1045,10 +1081,53 @@ def query_history_item(message, time_period):
 
 
 
-@bot.callback_query_handler(func=lambda call: call.data.split()[0] in ['(hist_item_day)', '(hist_item_month)', '(hist_item_year)'])
-def test(call):
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(hist_item_day)')
+def history_day(call):
     bot.delete_message(call.message.chat.id, call.message.id)
-    print(call.data)
+    cursor = db.cursor()
+
+    # Get stock id, ItemName and date
+    date = datetime.datetime.strptime(call.data.split()[2], '%d-%m-%Y')
+    try:
+        stock_id = int(call.data.split()[1])
+        cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
+        item = cursor.fetchone()[0]
+    except:
+    # If User wants to view every item
+
+        # Get transactions 
+        cursor.execute('SELECT id, datetime FROM transactions WHERE datetime < ? AND datetime > ?', (date + datetime.timedelta(days=1), date - datetime.timedelta(days=1)))
+        transactions = cursor.fetchall()
+        if not transactions:
+            bot.send_message(call.message.chat.id, f'No transactions occured on {call.data.split()[2]}')
+            send_index(call.message.chat)
+            return
+        
+        # Send transaction history
+        bot.send_message(call.message.chat.id, f'<u>Transaction History Report on {call.data.split()[2]}</u>', parse_mode='HTML')
+        for transaction in transactions:
+            bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
+        send_index(call.message.chat)
+        return
+    
+    # Get transactions 
+    cursor.execute('SELECT id, datetime FROM transactions JOIN transaction_items ON transactions.id = transaction_items.transaction_id WHERE stock_id = ? AND datetime < ? AND datetime > ?', (stock_id, date + datetime.timedelta(days=1), date - datetime.timedelta(days=1)))
+    transactions = cursor.fetchall()
+    if not transactions:
+        bot.send_message(call.message.chat.id, f"No transactions involving '{item}' on {call.data.split()[2]}")
+        send_index(call.message.chat)
+        return
+    
+    # Send transaction history
+    bot.send_message(call.message.chat.id, f"<u>Transaction History Report on {call.data.split()[2]}</u> involving '{item}'", parse_mode='HTML')
+    for transaction in transactions:
+        bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
+    send_index(call.message.chat)
+    
+        
+
+            
+
 
 
 
@@ -1086,6 +1165,8 @@ def exit(call):
 # Handle /create_store command
 @bot.message_handler(commands=['create_store'])
 def create_store(message):
+    cursor = db.cursor()
+
     # Ensure group does not already have a store
     cursor.execute('SELECT * FROM stores WHERE id = ?', (message.chat.id,))
     rows = cursor.fetchall()
@@ -1106,6 +1187,8 @@ def create_store(message):
     bot.register_next_step_handler(msg, created_store)
 
 def created_store(message):
+    cursor = db.cursor()
+
     # Ensure store name is a string
     if not message.text:
         bot.reply_to(message, 'Invalid store name')

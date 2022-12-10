@@ -1,1 +1,1 @@
-print(len(2022))
+import datetime
