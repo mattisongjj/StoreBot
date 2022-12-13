@@ -1128,15 +1128,102 @@ def history_month(call):
 
 
 
-
+# Handles editing of store details
 @bot.callback_query_handler(func=lambda call : call.data == 'Edit Store Details')
 def edit_store_details(call):
     bot.delete_message(call.message.chat.id, call.message.id)
-    cursor = db.cursor
+    cursor = db.cursor()
 
-            
+    # Ensure user is administrator
+    if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
+        return
+
+    # Get current store details
+    cursor.execute('SELECT StoreName, contact FROM stores WHERE id = ?', (call.message.chat.id,))
+    details = cursor.fetchone()
+
+    # Create markup
+    markup = quick_markup({'Back': {'callback_data': '(back_index)'},'Change Store Contact Number': {'callback_data': '(contact)'}, 'Change Store Name': {'callback_data': '(change_name)'}}, row_width=1)
+
+    bot.send_message(call.message.chat.id, f'<b>Current Store Details</b>\n\n<b>Store Name</b>: {details[0]}\n<b>Contact Number</b>: {details[1]}', reply_markup=markup, parse_mode='HTML')
+    
+
+# Handles changing of store contact number
+@bot.callback_query_handler(func= lambda call: call.data == '(contact)')
+def change_contact(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Query for new contact number
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the new contact number for this store.')
+    bot.register_next_step_handler(msg, update_contact)
+
+def update_contact(message):
+    cursor = db.cursor()
+
+    # Get current contact number
+    cursor.execute('SELECT contact FROM stores WHERE id = ?', (message.chat.id,))
+    contact = cursor.fetchone()[0]
 
 
+    # Validate contact
+    if not message.text:
+        bot.reply_to(message, 'Invalid contact number.')
+        send_index(bot, message.chat)
+    try:
+        new_contact = int(message.text)
+        if new_contact <= 0:
+            bot.reply_to(message, 'Invalid contact number, number must be a positive integer.')
+            send_index(bot, message.chat)
+            return
+    except:
+        bot.reply_to(message, 'Invalid contact number, number must be an integer.')
+        send_index(bot, message.chat)
+        return
+    if new_contact == contact:
+        bot.reply_to(message, 'New contact number must be different from current contact number.')
+        send_index(bot, message.chat)
+        return
+    
+    # Update contact
+    cursor.execute('UPDATE stores SET contact = ? WHERE id = ?', (new_contact, message.chat.id))
+    db.commit()
+    bot.send_message(message.chat.id, f"Store contact number has been changed from '{contact}' to '{new_contact}'.")
+    send_index(bot, message.chat)
+
+
+# Handles changing of store name
+@bot.callback_query_handler(func=lambda call: call.data == '(change_name)')
+def query_newname(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    
+    # Query for new store name
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the new store name.', parse_mode='HTML')
+    bot.register_next_step_handler(msg, update_storename)
+
+def update_storename(message):
+    cursor = db.cursor()
+
+    # Get current store name
+    cursor.execute('SELECT StoreName FROM stores WHERE id = ?', (message.chat.id,))
+    name = cursor.fetchone()[0]
+
+    # Validate store name
+    if not message.text:
+        bot.reply_to(message, 'Invalid store name.')
+        send_index(bot, message.chat)
+        return
+    new_name = message.text
+    if new_name == name:
+        bot.reply_to(message, 'Invalid name, new name must be different from current name.')
+        send_index(bot, message.chat)
+        return
+    
+    # Update store name
+    cursor.execute('UPDATE stores SET StoreName = ? WHERE id = ?', (new_name, message.chat.id))
+    db.commit()
+    bot.send_message(message.chat.id, f"Store name has been changed from '{name}' to '{new_name}'.")
+    send_index(bot, message.chat)
 
 
 
@@ -1172,7 +1259,7 @@ def exit(call):
 
 # Handle /create_store command
 @bot.message_handler(commands=['create_store'])
-def create_store(message):
+def query_storename(message):
     cursor = db.cursor()
 
     # Ensure group does not already have a store
@@ -1187,32 +1274,53 @@ def create_store(message):
         return
     
     # Ensure User is creator or adminstrator of chat
-    if not isadmin(bot, message.chat, message.from_user):
+    if not (bot, message.chat, message.from_user):
         return
     
     # Prompt user for store name
     msg = bot.reply_to(message, '<b>Reply</b> to this message name of your store.\n(Your store name is used for other users to find your store)', reply_markup=types.ForceReply(True, 'Name of Store'), parse_mode='HTML')
-    bot.register_next_step_handler(msg, created_store)
+    bot.register_next_step_handler(msg, query_storecontact)
 
-def created_store(message):
+def query_storecontact(message):
     cursor = db.cursor()
 
     # Ensure store name is a string
     if not message.text:
-        bot.reply_to(message, 'Invalid store name')
+        bot.reply_to(message, 'Invalid store name, enter /create_store to try again.')
         
     # Check if store name already exist
     cursor.execute('SELECT * FROM stores WHERE StoreName = ?', (message.text,))
     rows = cursor.fetchall()
     if len(rows) != 0:
-        bot.send_message(message.chat.id, 'Store name has already been taken.')
+        bot.send_message(message.chat.id, 'Store name has already been taken. Enter /create_store to try again')
         return
-            
-    # Initialise store
-    cursor.execute('INSERT INTO stores (id, StoreName) VALUES (?, ?)', (message.chat.id, message.text))
-    db.commit()
-    bot.send_message(message.chat.id, 'Store successfully initizalised. Enter /start to begin.')
 
+    # Query for contact number
+    name = message.text
+    msg = bot.send_message(message.chat.id, '<b>Reply</b> to this message the contact number for this store.')
+    bot.register_next_step_handler(msg, create_store, name)
+
+def create_store(message, name):
+    cursor = db.cursor()
+
+    # Validate contact
+    if not message.text:
+        bot.reply_to(message, 'Invalid contact number, enter /create_store to try again.')
+        return
+    try:
+        contact = int(message.text)
+        if contact <= 0:
+            bot.reply_to(message, 'Invalid contact number, number must be a positive integer, enter /create_store to try again.')
+            return
+    except:
+        bot.reply_to(message, 'Invalid contact number, number must be an integer, enter /create_store to try again.')
+        return
+    
+    # Initialise store
+    cursor.execute('INSERT INTO stores (id, StoreName, contact) VALUES (?, ?, ?)', (message.chat.id, name, contact))
+    db.commit()
+    bot.send_message(message.chat.id, f'<b>Store successfully created</b>\n\n<b>Store Name</b>: {name}\n<b>Contact Number</b>: {contact}', parse_mode='HTML')
+    send_index(bot, message.chat)
 
 # Enable saving next step handlers
 bot.enable_save_next_step_handlers(delay=2)
@@ -1225,6 +1333,6 @@ bot.infinity_polling()
 
 
 # Add Categories
-# Transaction history
+# Fix transaction history error 429
 # Add contact
 # Private chat request
