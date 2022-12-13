@@ -4,8 +4,10 @@ from telebot import types
 import sqlite3
 from sqlite3 import Error
 import datetime
+from dateutil.relativedelta import relativedelta
 from calendar import month_name
 from functions import transaction_info, transaction_markup, isadmin, send_index
+from time import sleep
 
 
 # Set API key
@@ -881,7 +883,7 @@ def confirm_transaction(call):
         for item in below_minreq:
             reply = reply + f'<b>{item[0]}</b> (Current Qty: {item[1]}, Required Quantity: {item[2]}, Deficit: {item[2] - item[1]})\n'
         bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
 
     send_index(bot, call.message.chat)
@@ -952,7 +954,6 @@ def query_time_period(call):
         {'Back': {'callback_data': '(back_index)'},
         'Day': {'callback_data': '(hist_time) day'},
         'Month': {'callback_data': '(hist_time) month'},
-        'Year': {'callback_data': '(hist_time) year'},
         }, row_width=1
     )
 
@@ -966,14 +967,12 @@ def query_time_period2(call):
     time_period = call.data.split()[1]
 
     if time_period == 'day':
-        msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the date for transaction history viewing in the format (DD-MM-YYYY).\n(<b>For example</b>: 21-11-2022)', parse_mode='HTML')
+        msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the date for transaction history viewing in the format (DD/MM/YYYY).\n(<b>For example</b>: 21/11/2002)', parse_mode='HTML')
         bot.register_next_step_handler(msg, query_history_item, time_period)
     elif time_period == 'month':
-        msg = bot.send_message(call.message.chat.id, "<b>Reply</b> to this message the month and year for transaction history viewing in the format (MM-YYYY).\n(<b>For example</b>: '06-2021' for June 2021)", parse_mode='HTML')
+        msg = bot.send_message(call.message.chat.id, "<b>Reply</b> to this message the month and year for transaction history viewing in the format (MM/YYYY).\n(<b>For example</b>: '06/2021' for June 2021)", parse_mode='HTML')
         bot.register_next_step_handler(msg, query_history_item, time_period)
-    else: 
-        msg = bot.send_message(call.message.chat.id, "<b>Reply</b> to this message the year for transaction history viewing.\n(<b>For example</b>: '2022'.)", parse_mode='HTML')
-        bot.register_next_step_handler(msg, query_history_item, time_period)
+
 
 def query_history_item(message, time_period):
     cursor = db.cursor()
@@ -987,10 +986,10 @@ def query_history_item(message, time_period):
     # Validate day
     if time_period == 'day':
         try:
-            ddmmyyyy = list(map(int, message_data.split('-')))
-            date = datetime.datetime(year=ddmmyyyy[2], month=ddmmyyyy[1], day=ddmmyyyy[0]).strftime('%d-%m-%Y')
+            ddmmyyyy = list(map(int, message_data.split('/')))
+            date = datetime.datetime(year=ddmmyyyy[2], month=ddmmyyyy[1], day=ddmmyyyy[0]).strftime('%d/%m/%Y')
         except:
-            bot.reply_to(message, 'Invalid date, ensure to reply a valid date in the format (DD-MM-YYYY).')
+            bot.reply_to(message, 'Invalid date, ensure to reply a valid date in the format (DD/MM/YYYY).')
             send_index(bot, message.chat)
             return
         # Get items in store
@@ -1008,8 +1007,8 @@ def query_history_item(message, time_period):
     # Validate month
     elif time_period == 'month':
         try:
-            mmyyyy = list(map(int, message_data.split('-')))
-            month = datetime.datetime(year=mmyyyy[1], month=mmyyyy[0], day=1).strftime('%d-%m-%Y')
+            mmyyyy = list(map(int, message_data.split('/')))
+            month = datetime.datetime(year=mmyyyy[1], month=mmyyyy[0], day=1).strftime('%d/%m/%Y')
         except:
             bot.reply_to(message, 'Invalid month ensure to reply a number')
             send_index(bot, message.chat)
@@ -1026,29 +1025,6 @@ def query_history_item(message, time_period):
         for item in items:
             markup[item[1]] = {'callback_data': f'(hist_item_month) {item[0]} {month}'}
         bot.send_message(message.chat.id, f'Select an item for transactions during {month_name[mmyyyy[0]]} {mmyyyy[1]}', reply_markup=quick_markup(markup, row_width=1))
-    # Validate year
-    else:
-        try:
-            if len(message_data) != 4:
-                bot.reply_to(message, 'Invalid year ensure to reply a 4 digit number.')
-                return
-            year = int(message_data)
-        except:
-            bot.reply_to(message, 'Invalid month ensure to reply a number')
-            send_index(bot, message.chat)
-            return
-        # Get items in store
-        cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
-        items = cursor.fetchall()
-        if not items:
-            bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
-            send_index(bot, message.chat)
-            return
-        # Create markup
-        markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_year) all {year}'}}
-        for item in items:
-            markup[item[1]] = {'callback_data': f'(hist_item_year) {item[0]} {year}'}
-        bot.send_message(message.chat.id, f'Select an item for transactions during the year {year}', reply_markup=quick_markup(markup, row_width=1))
 
 
 
@@ -1058,7 +1034,7 @@ def history_day(call):
     cursor = db.cursor()
 
     # Get stock id, ItemName and date
-    date = datetime.datetime.strptime(call.data.split()[2], '%d-%m-%Y')
+    date = datetime.datetime.strptime(call.data.split()[2], '%d/%m/%Y')
     try:
         stock_id = int(call.data.split()[1])
         cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
@@ -1078,6 +1054,7 @@ def history_day(call):
         bot.send_message(call.message.chat.id, f'<u>Transaction History Report on {call.data.split()[2]}</u>', parse_mode='HTML')
         for transaction in transactions:
             bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
+            sleep(2.5)
         send_index(bot, call.message.chat)
         return
     
@@ -1090,12 +1067,72 @@ def history_day(call):
         return
     
     # Send transaction history
-    bot.send_message(call.message.chat.id, f"<u>Transaction History Report on {call.data.split()[2]}</u> involving '{item}'", parse_mode='HTML')
+    bot.send_message(call.message.chat.id, f"<u>Transaction History Report on {call.data.split()[2]} involving '{item}'</u>", parse_mode='HTML')
     for transaction in transactions:
         bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
+        sleep(2.5)
     send_index(bot, call.message.chat)
-    
+
+
+
+@bot.callback_query_handler(func=lambda call : call.data.split()[0] == '(hist_item_month)')
+def history_month(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get stock id, ItemName and date
+    date = datetime.datetime.strptime(call.data.split()[2], '%d/%m/%Y')
+    try:
+        stock_id = int(call.data.split()[1])
+        cursor.execute('SELECT ItemName FROM stocks WHERE id = ?', (stock_id,))
+        item = cursor.fetchone()[0]
+    except:
+        # User wants to view all items
+
+        # Get transactions
+        cursor.execute('SELECT id, datetime FROM transactions WHERE datetime < ? AND datetime > ?', (date + relativedelta(months=+1), date + relativedelta(months=-1)))
+        transactions = cursor.fetchall()
+        if not transactions:
+            bot.send_message(call.message.chat.id, f'No transactions occured during {month_name[date.month]} {date.year}.')
+            send_index(bot, call.message.chat.id)
+            return
         
+        # Send transaction history
+        bot.send_message(call.message.chat.id, f'<u>Transaction History Report for {month_name[date.month]} {date.year}</u>', parse_mode='HTML')
+        for transaction in transactions:
+            bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
+            sleep(2.5)
+        send_index(bot, call.message.chat)
+        return
+
+    # Get transactions 
+    cursor.execute('SELECT id, datetime FROM transactions JOIN transaction_items ON transactions.id = transaction_items.transaction_id WHERE stock_id = ? AND datetime < ? AND datetime > ?', (stock_id, date + relativedelta(months=+1), date + relativedelta(months=-1)))
+    transactions = cursor.fetchall()
+    if not transactions:
+        bot.send_message(call.message.chat.id, f"No transactions involving '{item}' during {month_name[date.month]} {date.year}.")
+        send_index(bot, call.message.chat)
+        return
+    
+    # Send transaction history
+    bot.send_message(call.message.chat.id, f"<u>Transaction History Report for {month_name[date.month]} {date.year} involving '{item}'</u>", parse_mode='HTML')
+    for transaction in transactions:
+        bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
+        sleep(2.5)
+    send_index(bot, call.message.chat)
+
+
+
+
+
+
+
+
+
+
+@bot.callback_query_handler(func=lambda call : call.data == 'Edit Store Details')
+def edit_store_details(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor
 
             
 
