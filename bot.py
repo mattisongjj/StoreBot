@@ -5,7 +5,7 @@ import sqlite3
 from sqlite3 import Error
 import datetime
 from calendar import month_name
-from transactions import transaction_info, transaction_markup
+from functions import transaction_info, transaction_markup, isadmin, send_index
 
 
 # Set API key
@@ -17,35 +17,6 @@ try:
     db = sqlite3.connect('stores.db', check_same_thread=False)
 except Error as e:
     print(f"Error '{e}' occured when establishing connection to database")
-
-
-
-
-def isadmin(chat, user):
-    # Check if user is admin in chat
-    member = bot.get_chat_member(chat.id, user.id)
-    if member.status not in ['creator', 'administrator']:
-        bot.send_message(chat.id, 'Access only for administrators of this chat.')
-        return False
-    return True
-
-def send_index(chat):
-    # Send index options in chat
-    bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({
-                'View Current Stock': {'callback_data': 'View Current Stock'},
-                'Manage Items': {'callback_data': 'Manage Items'},
-                'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
-                'View Transaction History': {'callback_data': 'View Transaction History'},
-                'Edit Store Details': {'callback_data': 'Edit Store Details'},
-                'Exit': {'callback_data': 'Exit'}},
-                row_width=1))
-
-
-
-
-
-
-
 
     
 # Handle /start and /help commands
@@ -65,7 +36,7 @@ def index(message):
             return
         # Show Options
         else:
-            send_index(message.chat)
+            send_index(bot, message.chat)
 
 
     # Bot was started in a private chat
@@ -110,7 +81,7 @@ def view_item(call):
     cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ? AND is_deleted = FALSE', (stock_id,))
     item = cursor.fetchone()
     bot.send_message(call.message.chat.id, f'Quantity of {item[0]} in store: {item[1]}')
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'View Full Stock')
 def full_stock(call):
@@ -124,7 +95,7 @@ def full_stock(call):
     for item in items:
         reply = reply + f'{item[0]} x{item[1]}\n'
     bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
     
 
 @bot.callback_query_handler(func=lambda call: call.data == 'Check Minimum Requirement')
@@ -137,7 +108,7 @@ def check_minimum_requirement(call):
     items = cursor.fetchall()
     if not items:
         bot.send_message(call.message.chat.id, 'No items in store are below the required amount.')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
 
     # Create reply
@@ -147,7 +118,7 @@ def check_minimum_requirement(call):
         reply = reply + f'<u><b>{item[0]}</b></u>\n(Current Qty: {item[1]}, Required Quantity: {item[2]}, Deficit: {item[2] - item[1]})\n'
     
     bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 
 
@@ -157,7 +128,7 @@ def add_remove_rename_options(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
+    if not isadmin(bot, call.message.chat, call.from_user):
         return
 
     # Create markup
@@ -175,7 +146,7 @@ def new_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
+    if not isadmin(bot, call.message.chat, call.from_user):
         return
     msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new item.', reply_markup=types.ForceReply(True, 'Name of new item'),parse_mode='HTML')
     bot.register_next_step_handler(msg, get_total)
@@ -201,11 +172,11 @@ def get_minimum(message, item):
         qty = int(message.text)
         if qty <= 0:
             bot.reply_to(message, 'Invalid Quantity')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
     except:
         bot.reply_to(message, 'Invalid Quantity')
-        send_index(message.chat)
+        send_index(bot, message.chat)
         return
 
     msg = bot.reply_to(message, f"<b>Reply</b> to this message the minimum quantity of '{item}' required in store.\n(Reply '0' if item does not have a mimimum requirement)", reply_markup=types.ForceReply(True, 'Minimum Quantity'), parse_mode='HTML')
@@ -219,11 +190,11 @@ def add_item(message, item, qty):
         min = int(message.text)
         if min < 0:
             bot.reply_to(message, 'Invalid Quantity')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
     except:
         bot.reply_to(message, 'Invalid quantity')
-        send_index(message.chat)
+        send_index(bot, message.chat)
         return
 
     # Check is item has been deleted before
@@ -246,7 +217,7 @@ def add_item(message, item, qty):
 
     bot.send_message(message.chat.id, f'x{qty} {item} has been added to store.\n(Minimum requirement: {min})')
     bot.send_message(message.chat.id, '<b>New Transaction Added</b>' + transaction_info(trans_id, db), parse_mode='HTML')
-    send_index(message.chat)
+    send_index(bot, message.chat)
 
 
 
@@ -259,7 +230,7 @@ def rename_item_query(call):
     cursor = db.cursor()
 
     # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
+    if not isadmin(bot, call.message.chat, call.from_user):
         return
 
     # Get current items in store
@@ -267,7 +238,7 @@ def rename_item_query(call):
     rows = cursor.fetchall()
     if len(rows) == 0:
         bot.send_message(call.message.chat.id, 'There is currently no items in store to rename.')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
 
     # Create markup
@@ -303,7 +274,7 @@ def rename_item_db(message, stock_id, item):
     cursor.execute('SELECT * FROM stocks WHERE ItemName = ? AND store_id = ? AND is_deleted = FALSE', (new_name, message.chat.id))
     if len(cursor.fetchall()) > 0:
         bot.reply_to(message, 'This item is already in store')
-        send_index(message.chat)
+        send_index(bot, message.chat)
         return
 
     # Update database
@@ -311,7 +282,7 @@ def rename_item_db(message, stock_id, item):
     db.commit()
 
     bot.send_message(message.chat.id, f"'{item}' renamed to '{new_name}'.")
-    send_index(message.chat)
+    send_index(bot, message.chat)
 
 
 
@@ -322,7 +293,7 @@ def remove_item_query(call):
     cursor = db.cursor()
 
     # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
+    if not isadmin(bot, call.message.chat, call.from_user):
         return
     
     # Get items in store
@@ -330,7 +301,7 @@ def remove_item_query(call):
     rows = cursor.fetchall()
     if len(rows) == 0:
         bot.send_message(call.message.chat.id, 'There is currently no items in store to remove.')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
 
     # Create markup
@@ -370,7 +341,7 @@ def remove_item(call):
 
     bot.send_message(call.message.chat.id, f"'{item}' has been removed from store.")
     bot.send_message(call.message.chat.id, '<b>New Transaction Added</b>' + transaction_info(trans_id, db), parse_mode='HTML')
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 
 
@@ -420,7 +391,7 @@ def choose_type(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Transaction Type')
 def new_type(call):
     # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
+    if not isadmin(bot, call.message.chat, call.from_user):
         return
     # Get type name
     bot.delete_message(call.message.chat.id, call.message.id)
@@ -447,7 +418,7 @@ def add_type(message):
         cursor.execute('INSERT INTO transaction_types (store_id, type) VALUES (?, ?)', (message.chat.id, type))
         db.commit()
     bot.reply_to(message, 'New type successfully added.')
-    send_index(message.chat)
+    send_index(bot, message.chat)
 
 
 
@@ -460,7 +431,7 @@ def remove_type(call):
     cursor = db.cursor()
 
     # Ensure user is admin
-    if not isadmin(call.message.chat, call.from_user):
+    if not isadmin(bot, call.message.chat, call.from_user):
         return
 
     # Get transaction types
@@ -470,7 +441,7 @@ def remove_type(call):
     # Ensure that created types exist
     if len(types) == 0:
         bot.send_message(call.message.chat.id, "There are currently no transaction types to be removed.\n<b>Note</b>: 'Issue' and 'Loan' cannot be removed.", parse_mode='HTML')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
 
     # Create markup
@@ -496,7 +467,7 @@ def remove_type_db(call):
     cursor.execute('UPDATE transaction_types SET is_deleted = TRUE WHERE id = ?', (id,))
     db.commit()
     bot.send_message(call.message.chat.id, f"Transaction type '{type}' removed.")
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 
 
@@ -547,7 +518,7 @@ def rename_transaction_type_db(message, id ,type):
     cursor.execute('SELECT * FROM transaction_types WHERE store_id = ? AND type = ? AND is_deleted = FALSE', (message.chat.id, new_name))
     if len(cursor.fetchall()) > 0:
         bot.reply_to(message, f'{new_name} transaction type has already been added to store.')
-        send_index(message.chat)
+        send_index(bot, message.chat)
         return
 
     # Update database
@@ -555,7 +526,7 @@ def rename_transaction_type_db(message, id ,type):
     db.commit()
 
     bot.send_message(message.chat.id, f"'{type}' renamed to '{new_name}'.")
-    send_index(message.chat)
+    send_index(bot, message.chat)
 
 
 
@@ -852,7 +823,7 @@ def confirm_transaction_info(call):
     cursor.execute('SELECT * FROM transactions WHERE id = ? AND confirmed = TRUE', (trans_id,))
     if cursor.fetchone():
         bot.send_message(call.message.chat.id, 'This transaction has already been confirmed.')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
     
     # Check for customer
@@ -881,7 +852,7 @@ def confirm_transaction(call):
     cursor.execute('SELECT * FROM transactions WHERE id = ? AND confirmed = TRUE', (trans_id,))
     if cursor.fetchone():
         bot.send_message(call.message.chat.id, 'This transaction has already been confirmed.')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
 
     # Get item changes
@@ -913,7 +884,7 @@ def confirm_transaction(call):
         send_index(call.message.chat)
         return
 
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 
 
@@ -949,7 +920,7 @@ def cancel_transaction(call):
     db.commit()
 
     bot.send_message(call.message.chat.id, '<b>Transaction Cancelled.</b>' + info, parse_mode='HTML')
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 
 
@@ -1011,7 +982,7 @@ def query_history_item(message, time_period):
     message_data = message.text
     if not message_data:
         bot.reply_to(message, 'Invalid time period.')
-        send_index(message.chat)
+        send_index(bot, message.chat)
         return
     # Validate day
     if time_period == 'day':
@@ -1020,14 +991,14 @@ def query_history_item(message, time_period):
             date = datetime.datetime(year=ddmmyyyy[2], month=ddmmyyyy[1], day=ddmmyyyy[0]).strftime('%d-%m-%Y')
         except:
             bot.reply_to(message, 'Invalid date, ensure to reply a valid date in the format (DD-MM-YYYY).')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
         # Get items in store
         cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
         items = cursor.fetchall()
         if not items:
             bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
         # Create markup
         markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_day) all {date}'}}
@@ -1041,14 +1012,14 @@ def query_history_item(message, time_period):
             month = datetime.datetime(year=mmyyyy[1], month=mmyyyy[0], day=1).strftime('%d-%m-%Y')
         except:
             bot.reply_to(message, 'Invalid month ensure to reply a number')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
         # Get items in store
         cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
         items = cursor.fetchall()
         if not items:
             bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
         # Create markup
         markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_month) all {month}'}}
@@ -1064,14 +1035,14 @@ def query_history_item(message, time_period):
             year = int(message_data)
         except:
             bot.reply_to(message, 'Invalid month ensure to reply a number')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
         # Get items in store
         cursor.execute('SELECT id, ItemName FROM stocks WHERE store_id = ?', (message.chat.id,))
         items = cursor.fetchall()
         if not items:
             bot.send_message(message.chat.id, 'No items in store, add items to store to view transaction history.')
-            send_index(message.chat)
+            send_index(bot, message.chat)
             return
         # Create markup
         markup = {'Back': {'callback_data': 'View Transaction History'}, 'All Items': {'callback_data': f'(hist_item_year) all {year}'}}
@@ -1100,14 +1071,14 @@ def history_day(call):
         transactions = cursor.fetchall()
         if not transactions:
             bot.send_message(call.message.chat.id, f'No transactions occured on {call.data.split()[2]}')
-            send_index(call.message.chat)
+            send_index(bot, call.message.chat)
             return
         
         # Send transaction history
         bot.send_message(call.message.chat.id, f'<u>Transaction History Report on {call.data.split()[2]}</u>', parse_mode='HTML')
         for transaction in transactions:
             bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
     
     # Get transactions 
@@ -1115,14 +1086,14 @@ def history_day(call):
     transactions = cursor.fetchall()
     if not transactions:
         bot.send_message(call.message.chat.id, f"No transactions involving '{item}' on {call.data.split()[2]}")
-        send_index(call.message.chat)
+        send_index(bot, call.message.chat)
         return
     
     # Send transaction history
     bot.send_message(call.message.chat.id, f"<u>Transaction History Report on {call.data.split()[2]}</u> involving '{item}'", parse_mode='HTML')
     for transaction in transactions:
         bot.send_message(call.message.chat.id, f'<b>Date</b>: {transaction[1].split()[0]}\n<b>Time</b>: {transaction[1].split()[1]}' + transaction_info(transaction[0], db), parse_mode='HTML')
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
     
         
 
@@ -1149,7 +1120,7 @@ def history_day(call):
 @bot.callback_query_handler(func=lambda call: call.data == '(back_index)')
 def back_index(call):
     bot.delete_message(call.message.chat.id, call.message.id)
-    send_index(call.message.chat)
+    send_index(bot, call.message.chat)
 
 
 # Closes bot
@@ -1179,7 +1150,7 @@ def create_store(message):
         return
     
     # Ensure User is creator or adminstrator of chat
-    if not isadmin(message.chat, message.from_user):
+    if not isadmin(bot, message.chat, message.from_user):
         return
     
     # Prompt user for store name

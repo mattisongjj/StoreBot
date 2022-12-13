@@ -31,3 +31,22 @@ def transaction_markup(id):
                             'Confirm Transaction': {'callback_data': f'(confirm) {id}'},
                             'Cancel Transaction': {'callback_data': f'(cancel) {id}'}},
                             row_width=1)
+
+# Check if user is admin in chat        
+def isadmin(bot, chat, user):
+    member = bot.get_chat_member(chat.id, user.id)
+    if member.status not in ['creator', 'administrator']:
+        bot.send_message(chat.id, 'Access only for administrators of this chat.')
+        return False
+    return True
+
+# Send index options in chat
+def send_index(bot, chat):
+    bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({
+                'View Current Stock': {'callback_data': 'View Current Stock'},
+                'Manage Items': {'callback_data': 'Manage Items'},
+                'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
+                'View Transaction History': {'callback_data': 'View Transaction History'},
+                'Edit Store Details': {'callback_data': 'Edit Store Details'},
+                'Exit': {'callback_data': 'Exit'}},
+                row_width=1))
