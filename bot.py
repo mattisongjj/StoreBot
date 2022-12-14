@@ -1309,10 +1309,17 @@ def contact_store(message):
 @bot.callback_query_handler(func=lambda call: call.data == '(Request)')
 def request_query_storename(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
 
-    # Query for store name
-    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this messsage the name of the store you would like to request from.', parse_mode='HTML')
-    bot.register_next_step_handler(msg, request_query_items)
+    # Check for active request
+    cursor.execute('SELECT id FROM request WHERE user = ?', (call.from_user.username,))
+    try:
+        request_id = cursor.fetchone()[0]
+        bot.send_message(call.message.chat.id, '<b>Uncompleted Request Found</b>\nComplete or cancel request before starting a new one.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+    except:
+        # Query for store name
+        msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this messsage the name of the store you would like to request from.', parse_mode='HTML')
+        bot.register_next_step_handler(msg, request_query_items)
 
 def request_query_items(message):
 
@@ -1373,7 +1380,7 @@ def select_items_req(call):
         store_items[item[0]] = [item[1], item[2]]
 
     # Create markup excluding items already in request
-    markup = {}
+    markup = {'Back': {'callback_data': f'(back_req) {request_id}'}}
     for item in store_items:
         if item not in request_stock_ids:
             markup[f'{store_items[item][0]} (Quantity: {store_items[item][1]})'] = {'callback_data': f'(add_item_req) {item} {request_id}'}
@@ -1385,9 +1392,23 @@ def select_items_req(call):
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_item_req)')
 def get_itemqty_req(call):
     bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id and stock id
+    stock_id = int(call.data.split()[1])
+    request_id = int(call.data.split()[2])
+
+    # Get item name and quantity
+    cursor.execute('SELECT ItemName, Quantity FROM stocks WHERE id = ?', (stock_id,))
+    item = cursor.fetchone()
 
     # Query for quantity
-    bot.send_message(call.message.chat.id, f'{call.data}')
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item[0]} you would like to request.", parse_mode='HTML')
+    bot.register_next_step_handler(msg, add_item_request, request_id, item[1])
+
+def add_item_request(message, request_id, max_quantity):
+    print(request_id, max_quantity)
+    pass
 
 
 
@@ -1402,9 +1423,12 @@ def get_itemqty_req(call):
 
 
 
-
-
-
+# Handles back button for request
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(back_req)')
+def back_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    request_id = int(call.data.split()[1])
+    bot.send_message(call.message.chat.id, 'Choose an option to continue' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
 
 
 

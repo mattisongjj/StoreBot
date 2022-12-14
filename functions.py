@@ -57,8 +57,7 @@ def private_index(bot, chat):
 
 # Inline keyboard markup for request
 def request_markup(id):
-    return quick_markup({'Back': {'callback_data': '(back_private)'},
-                        'Select Items': {'callback_data': f'(select_items_req) {id}'}, 
+    return quick_markup({'Select Items': {'callback_data': f'(select_items_req) {id}'}, 
                         'Remove Items': {'callback_data': f'(select_remove_req) {id}'},
                          'Confirm Request': {'callback_data': f'(confirm_req) {id}'},
                           'Cancel Request': {'callback_data': f'(cancel_req) {id}'}},
