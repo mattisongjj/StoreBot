@@ -50,3 +50,46 @@ def send_index(bot, chat):
                 'Edit Store Details': {'callback_data': 'Edit Store Details'},
                 'Exit': {'callback_data': 'Exit'}},
                 row_width=1))
+
+# Send index options in private chat
+def private_index(bot, chat):
+    bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({'Request Items From Store': {'callback_data': '(Request)'}, 'Contact Store': {'callback_data': 'Contact Store'}, 'Exit': {'callback_data': 'Exit'}}, row_width=1))
+
+# Inline keyboard markup for request
+def request_markup(id):
+    return quick_markup({'Back': {'callback_data': '(back_private)'},
+                        'Select Items': {'callback_data': f'(select_items_req) {id}'}, 
+                        'Remove Items': {'callback_data': f'(select_remove_req) {id}'},
+                         'Confirm Request': {'callback_data': f'(confirm_req) {id}'},
+                          'Cancel Request': {'callback_data': f'(cancel_req) {id}'}},
+                          row_width=1)
+
+# Converts request information into text
+def request_info(id, db):
+    cursor = db.cursor()
+
+    # Get store name
+    cursor.execute('SELECT store_id FROM request WHERE id = ?', (id,))
+    store_id = cursor.fetchone()[0]
+    cursor.execute('SELECT StoreName FROM stores WHERE id = ?', (store_id,))
+    storename = cursor.fetchone()[0]
+
+    # Get items
+    cursor.execute('SELECT ItemName, request_items.quantity FROM (request JOIN request_items ON request.id = request_items.request_id) JOIN stocks  ON request_items.stock_id = stocks.id WHERE request.id = ?', (id,))
+    items = cursor.fetchall()
+    
+    # Create reply
+    reply = f"\n\n<u>Request Information</u>\n\n<b>Requesting From</b>: {storename}\n\n<u>Items</u>\n\n"
+
+    # Check for items
+    if not items:
+        reply += 'No items in request.'
+        return reply
+    
+    # Add items to reply
+    for item in items:
+        reply += f'<b>{item[0]}</b>: {item[1]}\n'
+    
+    return reply
+
+

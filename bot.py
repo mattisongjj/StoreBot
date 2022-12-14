@@ -6,7 +6,7 @@ from sqlite3 import Error
 import datetime
 from dateutil.relativedelta import relativedelta
 from calendar import month_name
-from functions import transaction_info, transaction_markup, isadmin, send_index
+from functions import transaction_info, transaction_markup, isadmin, send_index, private_index, request_markup, request_info
 from time import sleep
 
 
@@ -36,7 +36,7 @@ def index(message):
         if len(rows) != 1:
             bot.send_message(message.chat.id, 'This group currently does not have a store. Enter /create_store to initialize store.')
             return
-        # Show Options
+        # Show Group Chat Options
         else:
             send_index(bot, message.chat)
 
@@ -44,12 +44,10 @@ def index(message):
     # Bot was started in a private chat
     elif message.chat.type == 'private':
 
-        # Ask for store name
-        bot.send_message(message.chat.id, 'Enter a store name')
-        # Show options
-
-
-
+        # Show Private Chat Options
+        private_index(bot, message.chat)
+        
+        
 
 
 
@@ -64,6 +62,7 @@ def view_stock(call):
     items = cursor.fetchall()
     if len(items) == 0:
         bot.send_message(call.message.chat.id, 'Store does not have any items.')
+        send_index(bot, call.message.chat)
         return
     # Display options
     options = {'Back': {'callback_data': '(back_index)'}, 'View Full Stock': {'callback_data': 'View Full Stock'}, 'Check Minimum Requirement': {'callback_data': 'Check Minimum Requirement'}}
@@ -131,6 +130,7 @@ def add_remove_rename_options(call):
 
     # Ensure user is admin
     if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
         return
 
     # Create markup
@@ -149,6 +149,7 @@ def new_item(call):
 
     # Ensure user is admin
     if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
         return
     msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new item.', reply_markup=types.ForceReply(True, 'Name of new item'),parse_mode='HTML')
     bot.register_next_step_handler(msg, get_total)
@@ -233,6 +234,7 @@ def rename_item_query(call):
 
     # Ensure user is admin
     if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
         return
 
     # Get current items in store
@@ -296,6 +298,7 @@ def remove_item_query(call):
 
     # Ensure user is admin
     if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
         return
     
     # Get items in store
@@ -392,8 +395,10 @@ def choose_type(call):
 # Handles creation of new transaction type
 @bot.callback_query_handler(func=lambda call: call.data == 'Add New Transaction Type')
 def new_type(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
     # Ensure user is admin
     if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
         return
     # Get type name
     bot.delete_message(call.message.chat.id, call.message.id)
@@ -434,6 +439,7 @@ def remove_type(call):
 
     # Ensure user is admin
     if not isadmin(bot, call.message.chat, call.from_user):
+        send_index(bot, call.message.chat)
         return
 
     # Get transaction types
@@ -1230,21 +1236,181 @@ def update_storename(message):
 
 
 
-
-
-
-
-
-
-
-
-
-
 # Handles back button for index
 @bot.callback_query_handler(func=lambda call: call.data == '(back_index)')
 def back_index(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     send_index(bot, call.message.chat)
+
+
+# Handles back button for index for private chats
+@bot.callback_query_handler(func=lambda call: call.data == '(back_private)')
+def back_private(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    private_index(bot, call.message.chat)
+
+
+
+
+
+
+
+# Handles contact store option from private chats
+@bot.callback_query_handler(func=lambda call: call.data == 'Contact Store')
+def contact_query_storename(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Query for store name
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this messsage the name of the store you would like to contact.', parse_mode='HTML')
+    bot.register_next_step_handler(msg, contact_store)
+
+def contact_store(message):
+
+    # Validate store name
+    name = message.text
+    if not name:
+        bot.reply_to(message, 'Invalid store name.')
+        private_index(bot, message.chat)
+        return
+    
+    # Check Database for Store
+    cursor = db.cursor()
+    cursor.execute('SELECT id FROM stores WHERE StoreName = ?', (name,))
+    try:
+        store_id = cursor.fetchone()[0]
+    except:
+        bot.reply_to(message, f"Sorry the store '{name}' does not exist. Try another name.")
+        private_index(bot, message.chat)
+        return
+
+    # Get contact number
+    cursor.execute('SELECT contact FROM stores WHERE id = ?', (store_id,))
+    contact = cursor.fetchone()[0]
+
+    bot.send_message(message.chat.id, f"<b>Contact Number for '{name}'</b>: {contact}", parse_mode='HTML')
+    private_index(bot, message.chat)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Handles item requests from private chats
+@bot.callback_query_handler(func=lambda call: call.data == '(Request)')
+def request_query_storename(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Query for store name
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this messsage the name of the store you would like to request from.', parse_mode='HTML')
+    bot.register_next_step_handler(msg, request_query_items)
+
+def request_query_items(message):
+
+    # Validate store name
+    name = message.text
+    if not name:
+        bot.reply_to(message, 'Invalid store name.')
+        private_index(bot, message.chat)
+        return
+    
+    # Check Database for Store
+    cursor = db.cursor()
+    cursor.execute('SELECT id FROM stores WHERE StoreName = ?', (name,))
+    try:
+        store_id = cursor.fetchone()[0]
+    except:
+        bot.reply_to(message, f"Sorry the store '{name}' does not exist. Try another name.")
+        private_index(bot, message.chat)
+        return
+    
+    # Ensure store has at least one item
+    cursor.execute('SELECT id FROM stocks WHERE store_id = ?', (store_id,))
+    items = cursor.fetchall()
+    if not items:
+        bot.reply_to(message, 'This store currently does not have any items in store. Unable to request from this store.')
+        private_index(bot, message.chat)
+        return
+    
+    # Start new request
+    cursor.execute('INSERT INTO request (user, store_id) VALUES (?, ?)', (message.from_user.username, store_id))
+    db.commit()
+    request_id = cursor.lastrowid
+
+    # Send markup
+    bot.send_message(message.chat.id, '<b>New Request Started</b>' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+
+
+# Handles adding of items into request
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_items_req)')
+def select_items_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id and store id
+    request_id = int(call.data.split()[1])
+    cursor.execute('SELECT store_id FROM request WHERE id = ?', (request_id,))
+    store_id = cursor.fetchone()[0]
+
+    # Get current items in request
+    cursor.execute('SELECT stock_id FROM request_items WHERE request_id = ?', (request_id,))
+    request_stock_ids = cursor.fetchall()
+
+    # Get items in store
+    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ?', (store_id,))
+    rows = cursor.fetchall()
+    store_items = {}
+    for item in rows:
+        store_items[item[0]] = [item[1], item[2]]
+
+    # Create markup excluding items already in request
+    markup = {}
+    for item in store_items:
+        if item not in request_stock_ids:
+            markup[f'{store_items[item][0]} (Quantity: {store_items[item][1]})'] = {'callback_data': f'(add_item_req) {item} {request_id}'}
+
+    # Query for item to add to request
+    bot.send_message(call.message.chat.id, 'Select an item to add to request.', reply_markup=quick_markup(markup, row_width=1))
+
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_item_req)')
+def get_itemqty_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Query for quantity
+    bot.send_message(call.message.chat.id, f'{call.data}')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Closes bot
@@ -1297,7 +1463,7 @@ def query_storecontact(message):
 
     # Query for contact number
     name = message.text
-    msg = bot.send_message(message.chat.id, '<b>Reply</b> to this message the contact number for this store.')
+    msg = bot.send_message(message.chat.id, '<b>Reply</b> to this message the contact number for this store.', parse_mode='HTML')
     bot.register_next_step_handler(msg, create_store, name)
 
 def create_store(message, name):
@@ -1332,7 +1498,6 @@ bot.load_next_step_handlers
 bot.infinity_polling()
 
 
-# Add Categories
+
 # Fix transaction history error 429
-# Add contact
 # Private chat request
