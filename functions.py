@@ -59,6 +59,7 @@ def private_index(bot, chat):
 def request_markup(id):
     return quick_markup({'Select Items': {'callback_data': f'(select_items_req) {id}'}, 
                         'Remove Items': {'callback_data': f'(select_remove_req) {id}'},
+                        'Change/Remove Remarks': {'callback_data': f'(add_remove_req) {id}'},
                          'Confirm Request': {'callback_data': f'(confirm_req) {id}'},
                           'Cancel Request': {'callback_data': f'(cancel_req) {id}'}},
                           row_width=1)
@@ -67,15 +68,18 @@ def request_markup(id):
 def request_info(id, db):
     cursor = db.cursor()
 
-    # Get store name
-    cursor.execute('SELECT store_id FROM request WHERE id = ?', (id,))
-    store_id = cursor.fetchone()[0]
+    # Get store name and remarks
+    cursor.execute('SELECT store_id, remarks FROM request WHERE id = ?', (id,))
+    row = cursor.fetchone()
+    store_id = row[0]
+    remarks = row[1]
     cursor.execute('SELECT StoreName FROM stores WHERE id = ?', (store_id,))
     storename = cursor.fetchone()[0]
 
     # Get items
     cursor.execute('SELECT ItemName, request_items.quantity FROM (request JOIN request_items ON request.id = request_items.request_id) JOIN stocks  ON request_items.stock_id = stocks.id WHERE request.id = ? ORDER BY ItemName ASC', (id,))
     items = cursor.fetchall()
+
     
     # Create reply
     reply = f"\n\n<u>Request Information</u>\n\n<b>Requesting From</b>: {storename}\n\n<u>Items</u>\n\n"
@@ -88,7 +92,14 @@ def request_info(id, db):
     # Add items to reply
     for item in items:
         reply += f'<b>{item[0]}</b>: {item[1]}\n'
-    
+
+    # Add remarks to reply
+    reply += '\n<u>Remarks</u>\n'
+    if remarks:
+        reply += remarks
+    else:
+        reply += 'No remarks.'
+
     return reply
 
 

@@ -1519,13 +1519,18 @@ def confirm_request(call):
     items = cursor.fetchall()
 
     # Get store name and contact
-    cursor.execute('SELECT user, contact, store_id FROM request JOIN stores ON request.store_id = stores.id WHERE request.id = ?', (request_id,))
+    cursor.execute('SELECT user, contact, store_id, remarks FROM request JOIN stores ON request.store_id = stores.id WHERE request.id = ?', (request_id,))
     store = cursor.fetchone()
 
     # Create store chat reply
     store_reply = f'<b>New Request</b>\nFrom: @{store[0]}\n\n<u>Items</u>\n'
     for item in items:
         store_reply += f'x{item[1]} <b>{item[0]}</b>\n'
+    store_reply += '\n<u>Remarks</u>\n'
+    if store[3]:
+        store_reply += store[3]
+    else:
+        store_reply += 'No remarks.'
     
     # Create private chat reply
     private_reply = f'<b>Request Made</b>\nContact {store[1]} for more information.' + request_info(request_id, db)
@@ -1583,6 +1588,82 @@ def cancel_request(call):
     bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
     private_index(bot, call.message.chat)
     
+
+
+# Shows options to add or remove remarks to request in private chats
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_remove_req)')
+def query_addremove_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Create markup
+    markup = quick_markup({'Back': {'callback_data': f'(back_req) {request_id}'},'Change Remarks': {'callback_data': f'(add_remarks_req) {request_id}'}, 'Remove Remarks': {'callback_data': f'(remove_remarks_req) {request_id}'}}, row_width=1)
+
+    # Show options
+    bot.send_message(call.message.chat.id, 'Would you like to add or remove remarks to request?', reply_markup=markup)
+
+
+
+
+
+
+# Handles adding remarks to request in private chats
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(add_remarks_req)')
+def req_query_for_remarks(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Query for remarks
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message remarks for remarks', parse_mode='HTML')
+    bot.register_next_step_handler(msg, req_add_remarks, request_id)
+
+def req_add_remarks(message, request_id):
+    cursor = db.cursor()
+
+    # Validate remarks
+    remarks = message.text
+    if not remarks:
+        bot.reply_to(message, 'Invalid remarks.')
+        bot.send_message(message.chat.id, 'Select an option.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+        return
+    
+    # Update datebase
+    cursor.execute('UPDATE request SET remarks = ? WHERE id = ?', (remarks, request_id))
+    db.commit()
+    bot.send_message(message.chat.id, 'Remarks added to request.')
+    bot.send_message(message.chat.id, 'Select an option.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+    return
+
+
+# Handles removal of remarks from request in private chats
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_remarks_req)')
+def remove_remarks_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Check for remarks
+    cursor.execute('SELECT remarks FROM request WHERE id = ?', (request_id,))
+    if not cursor.fetchone()[0]:
+        bot.send_message(call.message.chat.id, 'No remarks to remove.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+        return
+    
+    # Remove remarks
+    cursor.execute('UPDATE request SET remarks = NULL WHERE id = ?', (request_id,))
+    db.commit()
+    bot.send_message(call.message.chat.id, 'Remarks removed.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+
+
+
+
+
+
 
 
 
