@@ -7,7 +7,7 @@ def transaction_info(id, db):
     row = cursor.fetchone()
     type = row[0]
     customer = row[1]
-    cursor.execute('SELECT ItemName, change FROM (transactions JOIN transaction_items ON transactions.id = transaction_items.transaction_id) JOIN stocks ON transaction_items.stock_id = stocks.id WHERE transactions.id = ?', (id,))
+    cursor.execute('SELECT ItemName, change FROM (transactions JOIN transaction_items ON transactions.id = transaction_items.transaction_id) JOIN stocks ON transaction_items.stock_id = stocks.id WHERE transactions.id = ? ORDER BY ItemName ASC', (id,))
     rows = cursor.fetchall()
     items = {}
     for row in rows:
@@ -74,7 +74,7 @@ def request_info(id, db):
     storename = cursor.fetchone()[0]
 
     # Get items
-    cursor.execute('SELECT ItemName, request_items.quantity FROM (request JOIN request_items ON request.id = request_items.request_id) JOIN stocks  ON request_items.stock_id = stocks.id WHERE request.id = ?', (id,))
+    cursor.execute('SELECT ItemName, request_items.quantity FROM (request JOIN request_items ON request.id = request_items.request_id) JOIN stocks  ON request_items.stock_id = stocks.id WHERE request.id = ? ORDER BY ItemName ASC', (id,))
     items = cursor.fetchall()
     
     # Create reply

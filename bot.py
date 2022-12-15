@@ -1415,15 +1415,15 @@ def add_item_request(message, request_id, stock_id, itemname, max_quantity):
         quantity = int(message.text)
         if quantity <= 0:
             bot.reply_to(message, 'Invalid quantity, quantity must be a positive number.')
-            private_index(bot, message.chat)
+            bot.send_message(message.chat.id, 'Select an option to continue.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
             return
         if quantity > max_quantity:
             bot.reply_to(message, f"Invalid quantity, this store only has x{max_quantity} '{itemname}'.")
-            private_index(bot, message.chat)
+            bot.send_message(message.chat.id, 'Select an option to continue.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
             return
     except:
         bot.reply_to(message, 'Invalid quantity.')
-        private_index(bot, message.chat)
+        bot.send_message(message.chat.id, 'Select an option to continue.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
         return
 
     # Update Database
@@ -1481,6 +1481,70 @@ def remove_item_req(call):
 
 
 
+
+
+
+# Handles request confirmation
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirm_req)')
+def show_request_info(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Ensure at least one item in request
+    cursor.execute('SELECT * FROM request_items WHERE request_id = ?', (request_id,))
+    if len(cursor.fetchall()) <= 0:
+        bot.send_message(call.message.chat.id, 'Cannot submit empty request' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+        return
+
+    # Create markup
+    markup = quick_markup({'Confirm': {'callback_data': f'(confirmed_req) {request_id}'}, 'Back': {'callback_data': f'(back_req) {request_id}'}}, row_width=1)
+
+    # Show request information
+    bot.send_message(call.message.chat.id, 'Confirm request?' + request_info(request_id, db), reply_markup=markup, parse_mode='HTML')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirmed_req)')
+def confirm_request(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Get items in request
+    cursor.execute('SELECT ItemName, request_items.quantity FROM request_items JOIN stocks ON request_items.stock_id = stocks.id WHERE request_id = ?', (request_id,))
+    items = cursor.fetchall()
+
+    # Get store name and contact
+    cursor.execute('SELECT user, contact, store_id FROM request JOIN stores ON request.store_id = stores.id WHERE request.id = ?', (request_id,))
+    store = cursor.fetchone()
+
+    # Create store chat reply
+    store_reply = f'<b>New Request</b>\nFrom: @{store[0]}\n\n<u>Items</u>\n'
+    for item in items:
+        store_reply += f'x{item[1]} <b>{item[0]}</b>\n'
+    
+    # Create private chat reply
+    private_reply = f'<b>Request Made</b>\nContact {store[1]} for more information.' + request_info(request_id, db)
+
+    # Update store chat
+    bot.send_message(store[2], store_reply, parse_mode='HTML')
+
+    # Update private chat
+    bot.send_message(call.message.chat.id, private_reply, parse_mode='HTML')
+
+    # Remove request from database
+    cursor.execute('DELETE FROM request WHERE id = ?', (request_id,))
+    db.commit()
+    cursor.execute('DELETE FROM request_items WHERE request_id = ?', (request_id,))
+    db.commit()
+
+
+
+    
 
 
 
