@@ -599,7 +599,7 @@ def show_add_items(call):
         items[row[0]] = row[1]
     
     # Get items in store
-    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE', (call.message.chat.id,))
+    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE ORDER BY ItemName ASC', (call.message.chat.id,))
     rows = cursor.fetchall()
 
     # Show items not in transaction
@@ -719,7 +719,7 @@ def show_remove_item(call):
     trans_id = int(call.data.split()[1])
 
     # Get items in transaction
-    cursor.execute('SELECT stock_id, ItemName, change FROM transaction_items JOIN stocks ON transaction_items.stock_id = stocks.id WHERE transaction_id = ?', (trans_id,))
+    cursor.execute('SELECT stock_id, ItemName, change FROM transaction_items JOIN stocks ON transaction_items.stock_id = stocks.id WHERE transaction_id = ? ORDER BY ItemName ASC', (trans_id,))
     items = cursor.fetchall()
 
     # Validate data
@@ -1370,10 +1370,11 @@ def select_items_req(call):
 
     # Get current items in request
     cursor.execute('SELECT stock_id FROM request_items WHERE request_id = ?', (request_id,))
-    request_stock_ids = cursor.fetchall()
+    rows = cursor.fetchall()
+    request_stock_ids = [i[0] for i in rows]
 
     # Get items in store
-    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ?', (store_id,))
+    cursor.execute('SELECT id, ItemName, Quantity FROM stocks WHERE store_id = ? AND is_deleted = FALSE ORDER BY ItemName ASC', (store_id,))
     rows = cursor.fetchall()
     store_items = {}
     for item in rows:
@@ -1403,15 +1404,80 @@ def get_itemqty_req(call):
     item = cursor.fetchone()
 
     # Query for quantity
-    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item[0]} you would like to request.", parse_mode='HTML')
-    bot.register_next_step_handler(msg, add_item_request, request_id, item[1])
+    msg = bot.send_message(call.message.chat.id, f"<b>Reply</b> to this message quantity of {item[0]} you would like to request.\n<b>Max Quantity</b>: {item[1]}", parse_mode='HTML')
+    bot.register_next_step_handler(msg, add_item_request, request_id, stock_id, item[0], item[1])
 
-def add_item_request(message, request_id, max_quantity):
-    print(request_id, max_quantity)
-    pass
+def add_item_request(message, request_id, stock_id, itemname, max_quantity):
+    cursor = db.cursor()
+
+    # Validate Quantity
+    try:
+        quantity = int(message.text)
+        if quantity <= 0:
+            bot.reply_to(message, 'Invalid quantity, quantity must be a positive number.')
+            private_index(bot, message.chat)
+            return
+        if quantity > max_quantity:
+            bot.reply_to(message, f"Invalid quantity, this store only has x{max_quantity} '{itemname}'.")
+            private_index(bot, message.chat)
+            return
+    except:
+        bot.reply_to(message, 'Invalid quantity.')
+        private_index(bot, message.chat)
+        return
+
+    # Update Database
+    cursor.execute('INSERT INTO request_items (request_id, stock_id, quantity) VALUES (?, ?, ?)', (request_id, stock_id, quantity))
+    db.commit()
+    bot.send_message(message.chat.id, f"x{quantity} {itemname} has been added to request" + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
 
 
 
+
+
+# Handles removing items from request
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(select_remove_req)')
+def get_itemremove_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Get items in request
+    cursor.execute('SELECT  stock_id, request_items.quantity, ItemName FROM request_items JOIN stocks ON request_items.stock_id = stocks.id WHERE request_id = ? ORDER BY ItemName ASC', (request_id,))
+    items = cursor.fetchall()
+    if not items:
+        bot.send_message(call.message.chat.id, 'No items in request to remove.' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
+        return
+    
+    # Create markup
+    markup = {'Back': {'callback_data': '(back_req)'}}
+    for item in items:
+        markup[f'{item[2]} ({item[1]})'] = {'callback_data': f'(remove_req) {item[0]} {request_id}'}
+    
+    # Query for item to be removed
+    bot.send_message(call.message.chat.id, 'Select an item to remove from request.' + request_info(request_id, db), reply_markup=quick_markup(markup, row_width=1), parse_mode='HTML')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_req)')
+def remove_item_req(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id and stock id
+    stock_id = int(call.data.split()[1])
+    request_id = int(call.data.split()[2])
+
+    # Get item name and quantity
+    cursor.execute('SELECT ItemName, request_items.quantity FROM request_items JOIN stocks ON request_items.stock_id = stocks.id WHERE request_id = ? AND stock_id = ?', (request_id, stock_id))
+    item = cursor.fetchone()
+
+    # Update database
+    cursor.execute('DELETE FROM request_items WHERE request_id = ? AND stock_id = ?', (request_id, stock_id))
+    db.commit()
+
+    bot.send_message(call.message.chat.id, f"x{item[1]} {item[0]} has been removed from request." + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
 
 
 
