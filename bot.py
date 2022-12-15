@@ -1486,7 +1486,7 @@ def remove_item_req(call):
 
 # Handles request confirmation
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(confirm_req)')
-def show_request_info(call):
+def confirm_show_request_info(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     cursor = db.cursor()
 
@@ -1542,8 +1542,46 @@ def confirm_request(call):
     cursor.execute('DELETE FROM request_items WHERE request_id = ?', (request_id,))
     db.commit()
 
+    private_index(bot, call.message.chat)
 
 
+
+
+# Handles cancellation of request
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(cancel_req)')
+def cancel_show_request_info(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Create markup
+    markup = quick_markup({'Cancel': {'callback_data': f'(cancelled_req) {request_id}'}, 'Back': {'callback_data': f'(back_req) {request_id}'}}, row_width=1)
+
+    # Show request information
+    bot.send_message(call.message.chat.id, 'Cancel this request?' + request_info(request_id, db), reply_markup=markup, parse_mode='HTML')
+
+
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(cancelled_req)')
+def cancel_request(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    cursor = db.cursor()
+
+    # Get request id
+    request_id = int(call.data.split()[1])
+
+    # Create reply
+    reply = 'The following request has been cancelled.' + request_info(request_id, db)
+
+    # Remove request from database
+    cursor.execute('DELETE FROM request WHERE id = ?', (request_id,))
+    db.commit()
+    cursor.execute('DELETE FROM request_items WHERE request_id = ?', (request_id,))
+    db.commit()
+
+    # Send reply
+    bot.send_message(call.message.chat.id, reply, parse_mode='HTML')
+    private_index(bot, call.message.chat)
     
 
 
