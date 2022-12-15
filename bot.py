@@ -1236,23 +1236,6 @@ def update_storename(message):
 
 
 
-# Handles back button for index
-@bot.callback_query_handler(func=lambda call: call.data == '(back_index)')
-def back_index(call):
-    bot.delete_message(call.message.chat.id, call.message.id)
-    send_index(bot, call.message.chat)
-
-
-# Handles back button for index for private chats
-@bot.callback_query_handler(func=lambda call: call.data == '(back_private)')
-def back_private(call):
-    bot.delete_message(call.message.chat.id, call.message.id)
-    private_index(bot, call.message.chat)
-
-
-
-
-
 
 
 # Handles contact store option from private chats
@@ -1664,13 +1647,17 @@ def remove_remarks_req(call):
 
 
 
+# Handles back button for index
+@bot.callback_query_handler(func=lambda call: call.data == '(back_index)')
+def back_index(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    send_index(bot, call.message.chat)
 
-
-
-
-
-
-
+# Handles back button for index for private chats
+@bot.callback_query_handler(func=lambda call: call.data == '(back_private)')
+def back_private(call):
+    bot.delete_message(call.message.chat.id, call.message.id)
+    private_index(bot, call.message.chat)
 
 # Handles back button for request
 @bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(back_req)')
@@ -1678,13 +1665,6 @@ def back_req(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     request_id = int(call.data.split()[1])
     bot.send_message(call.message.chat.id, 'Choose an option to continue' + request_info(request_id, db), reply_markup=request_markup(request_id), parse_mode='HTML')
-
-
-
-
-
-
-
 
 # Closes bot
 @bot.callback_query_handler(func=lambda call: call.data == 'Exit')
@@ -1769,8 +1749,3 @@ bot.load_next_step_handlers
 
 # Constantly check for new messages
 bot.infinity_polling()
-
-
-
-# Fix transaction history error 429
-# Private chat request
