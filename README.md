@@ -8,7 +8,8 @@ SQLite
 
 Libaries used:
 pyTelegramBotAPI
-
+sqlite3
+Various libaries for storing and manipulating date data.
 
 ## Bot Features
 bot.py

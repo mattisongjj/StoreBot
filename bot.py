@@ -213,6 +213,10 @@ def add_item(message, item, qty):
 
     # Update transactions
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    if not message.from_user.username:
+        bot.send_message(message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, message.chat)
+        return
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (message.chat.id, message.from_user.username, 3, time))
     db.commit()
     trans_id = cursor.lastrowid
@@ -337,6 +341,10 @@ def remove_item(call):
 
     # Update transactions
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    if not call.from_user.username:
+        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, call.message.chat)
+        return
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (call.message.chat.id, call.from_user.username, 4, time))
     db.commit()
     trans_id = cursor.lastrowid
@@ -401,7 +409,6 @@ def new_type(call):
         send_index(bot, call.message.chat)
         return
     # Get type name
-    bot.delete_message(call.message.chat.id, call.message.id)
     msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message name of new transaction type', reply_markup=types.ForceReply(True, 'Name of new transaction type'),parse_mode='HTML')
     bot.register_next_step_handler(msg, add_type)
 
@@ -564,6 +571,10 @@ def open_new_transaction(call):
     type_id=int(call.data.split()[1])
 
     # Add transaction to database
+    if not call.from_user.username:
+        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, call.message.chat)
+        return
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id) VALUES (?, ?, ?)', (call.message.chat.id, call.from_user.username, type_id,))
     db.commit()
 
@@ -1295,6 +1306,10 @@ def request_query_storename(call):
     cursor = db.cursor()
 
     # Check for active request
+    if not call.from_user.username:
+        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, call.message.chat)
+        return
     cursor.execute('SELECT id FROM request WHERE user = ?', (call.from_user.username,))
     try:
         request_id = cursor.fetchone()[0]
@@ -1332,6 +1347,10 @@ def request_query_items(message):
         return
     
     # Start new request
+    if not message.from_user.username:
+        bot.send_message(message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, message.chat)
+        return
     cursor.execute('INSERT INTO request (user, store_id) VALUES (?, ?)', (message.from_user.username, store_id))
     db.commit()
     request_id = cursor.lastrowid
