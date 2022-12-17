@@ -21,8 +21,8 @@ except Error as e:
     print(f"Error '{e}' occured when establishing connection to database")
 
     
-# Handle /start and /help commands
-@bot.message_handler(commands=['start', 'help'])
+# Handles /start command
+@bot.message_handler(commands=['start'])
 def index(message):
 # Start bot
     cursor = db.cursor()
@@ -46,7 +46,19 @@ def index(message):
 
         # Show Private Chat Options
         private_index(bot, message.chat)
-        
+
+
+# Handles /help command
+@bot.message_handler(commands=['help'])
+def help_message(message):
+
+    # Send information about the bot
+    if message.chat.type == 'group':
+        bot.send_message(message.chat.id, 'To start the bot use the /start command.\nIf you have yet to create a store in this chat by running the /create_store command, please do so before starting the bot.')
+        return
+    
+    else:
+        bot.send_message(message.chat.id, 'To start the bot use the /start command.')
         
 
 

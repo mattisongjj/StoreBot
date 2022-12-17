@@ -53,7 +53,7 @@ def send_index(bot, chat):
 
 # Send index options in private chat
 def private_index(bot, chat):
-    bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({'Request Items From Store': {'callback_data': '(Request)'}, 'Contact Store': {'callback_data': 'Contact Store'}, 'Exit': {'callback_data': 'Exit'}}, row_width=1))
+    bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({'Request Items': {'callback_data': '(Request)'}, 'Contact Store': {'callback_data': 'Contact Store'}, 'Exit': {'callback_data': 'Exit'}}, row_width=1))
 
 # Inline keyboard markup for request
 def request_markup(id):

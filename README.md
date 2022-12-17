@@ -13,7 +13,9 @@ Libaries used:
 - sqlite3
 - Various libaries for storing and manipulating date data.
 
+
 ## Video Demo: 
+
 
 ## Bot Features
 
@@ -21,11 +23,14 @@ To start the bot and access its features, use the /start command. (Ensure that y
 
 Once the /start command is run, the bot will reply with an 'inline keyboard', which are options to click on, which will allow you to access the bot.
 
+
 #### **Group Chat Features**
+
+The following features are available when the bot is started in a group chat.
 
 - **Store Creation**
 
-    - To start tracking items, item transactions and getting item request, you must first create a store.
+    - To access the other features and start tracking items, item transactions and getting item request, you must first create a store.
 
     - To create store:
 
@@ -88,7 +93,7 @@ Once the /start command is run, the bot will reply with an 'inline keyboard', wh
 
         6. The 'Cancel Transaction' option will cancel the transaction.
 
-    - Note that one store can have only one ongoing transaction at all times, and thus a new transaction can only be started when all transactions have been confirmed or cancelled.
+    - Note that one store can have only one ongoing transaction at all times, and thus a new transaction can only be started when the current transaction has been confirmed or cancelled.
         
 
 - **Viewing Transaction History**
@@ -101,20 +106,103 @@ Once the /start command is run, the bot will reply with an 'inline keyboard', wh
 
     - Once you have selected an item, the bot will then show you all transactions involving that item during the day/month, by sending one text message containing transaction information per transaction. (This process could take a long time depending on how many transactions there are.)
 
+
 #### **Private Chat Features**
 
-- Send item request to stores
-- Get store contact information
+The following features are available when the bot is started in a private chat with the bot.
+
+- **Send item request to stores**
+
+    - The 'Request Items' options allows you to send item request to stores.
+
+    - When selected the bot will first prompt you for the name of the store you would like to request items from.
+
+    - If you replied the bot with a valid store name, a new request is started and the bot will reply with the following options to edit your request:
+
+        1. The 'Select Items' option will prompt you to select an item from the store which you would like to add to the request. Once you have selected an item it will prompt you for the quantity of that item you would like to request, after which the item and its requested quantity is added to the request.
+
+        2. The 'Remove Items' option will prompt you for an item to remove from your request
+
+        3. The 'Change/Remove Remarks' option will allow you to add, change or remove any additonal remarks for your request.
+
+        4. The 'Confirm Request' option will confirm the request, after which the store will be notified of your request, and the bot will give you the contact number of the store, allowing you to get in touch with the store.
+
+        5. The 'Cancel Request' option will cancel the current request
+
+    - Note that any user may only have one current request at all times, thus to start a new request one must first confirm or cancel the current request.
+         
+- **Get store contact information**
+
+    - The 'Contact Store' option will prompt you for the name of the store you would like to contact.
+
+    - If you replied the bot with a valid store name, the bot will reply you with the contact number of the store.
+
 
 ## **Files**
 
-- bot.py
-- function.py
-- stores.db
+- **bot.py**
+
+    - Imports:
+        
+        - Imports `telebot` class from [pyTelegramBotAPI library](https://pypi.org/project/pyTelegramBotAPI/)
+
+        - Imports `sqlite3`, `datetime`, `calendar` and `time` from the [python standard library](https://docs.python.org/3/library/)
+
+        - Imports `relativedelta` class from [python-dateutil library](https://dateutil.readthedocs.io/en/latest/)
+
+        - Imports `functions.py`
+
+    - Functions/class instances:
+
+        - Creates instance of `telebot` class from `pyTelegramBotAPI` for establishing connection to the telegram API.
+
+        - Connects to local database (`stores.db`) using the Connection class from sqlite3 library.
+
+        - `@bot.message_handler` and `@bot.callback_query_handler` is used throughout the file to execute the function below the decorator, when commands are sent to the bot or when the 'CallbackQuery' type is sent to the bot from an 'inline keyboard'.
+
+        - `bot.register_next_step_handler(msg, func)` is used throughout the file to register a callback function, *func*, that is executed when a reply is sent to a message sent by the bot, *msg*.
+
+        - Most functions interact with the database (`stores.db`) by first creating an instance of the `Cursor` class from `sqlite3` library, and using it to execute SQLite statements as well as fetch or edit data.
+
+        - The `datetime` class from `datetime` library along with the `calendar` library and `relativedelta` class from `python-dateutil` library, is used throughout the file when manipulating data related to calendar dates for transactions.
+
+        - Multiple functions imported from `functions.py` are used throughout the file, mainly to create text replies and 'inline keyboard' markups which the bot sends out to users.
+
+
+- **stores.db**
+
+    - This file is the database for this project, it uses multiple tables to store all stores, item stocks, transactions and request.
+
+    - `stores` table stores the store id, store name and contact number of every store. Every store's id is equal to the chat id of the chat it was created in given by the Telegram API. The id column, which stores store id, is the primary key of this table.
+
+    - `stocks` table stores the item id, store id, item name, quantity, minimum requirement and deletion status of every item in the database. The id column, which stores item id, is the primary key of this table.
+
+    - `transaction_types` table stores the transaction type id, store id , name and deletion status of every transaction type in the database. The id column, which stores the transaction type id, is the primary key of this table. Notice that transaction type id from 1 to 4 have no store id, this is because these types are default types for all stores.
+
+    - `transactions` table stores the transaction id, store id, user who created the transaction, customer, type id, datetime and confirmation status for all transactions in the database. The id column, which stores transaction id, is the primary key for this table.
+
+    - `transaction_items` table stores the transaction id, item id, old item quantity and change in item quantity for every item involved in transactions in the database. This table does not have a primary key and is used to allow multiple items to be added to the same transaction.
+
+    - `request` table stores the request id, request user, id of the store requested, and any remarks for request made to stores from private chats with the bot. The id column, which stores request id, is the primary key of this table. Entries to this table are deleted once the request has been made, as there is no need to keep them once the stores have been notified of the request.
+
+    - `request_items` table stores the request id, item id and quantity requested for every item involved in ongoing request. This table does not have a primary key and is used to allow multiple items to be added to the same request.
+
 
 ## **How To Run The Bot**
 
-1. Ensure you have the latest version of python installed
-2. Ensure you have the following libraries installed:
+1. Ensure you have the latest version of `python` installed
+
+2. Ensure you have the following python libraries installed using pip:
+
+    1. [pyTelegramBotAPI]()
+    2. [python-dateutil]()
+
+3. Clone this repository using `git clone git@github.com:mattisongjj/project.git` at the command line
+
+4. Run the bot by running the command `python bot.py`
+
+5. Open [Telegram](https://telegram.org/) and search for the bot. (Username: `@automatedstore_bot`)
+
+6. Start using the bot by starting it in a private chat or group chat!
 
 
