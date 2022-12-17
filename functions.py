@@ -45,7 +45,7 @@ def send_index(bot, chat):
     bot.send_message(chat.id, 'Select an option.', reply_markup=quick_markup({
                 'View Current Stock': {'callback_data': 'View Current Stock'},
                 'Manage Items': {'callback_data': 'Manage Items'},
-                'Adjust Quantity/ New Transaction': {'callback_data': 'Adjust Qty'},
+                'New Transaction': {'callback_data': 'Adjust Qty'},
                 'View Transaction History': {'callback_data': 'View Transaction History'},
                 'Edit Store Details': {'callback_data': 'Edit Store Details'},
                 'Exit': {'callback_data': 'Exit'}},
