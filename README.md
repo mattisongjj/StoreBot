@@ -14,7 +14,7 @@ Libaries used:
 - Various libaries for storing and manipulating date data.
 
 
-## Video Demo: 
+## Video Demo: (https://youtu.be/JYc51R3CC2A)
 
 
 ## Bot Features
@@ -194,8 +194,8 @@ The following features are available when the bot is started in a private chat w
 
 2. Ensure you have the following python libraries installed using pip:
 
-    1. [pyTelegramBotAPI]()
-    2. [python-dateutil]()
+    1. [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI/)
+    2. [python-dateutil](https://dateutil.readthedocs.io/en/latest/)
 
 3. Clone this repository using `git clone git@github.com:mattisongjj/project.git` at the command line
 
