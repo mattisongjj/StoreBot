@@ -200,6 +200,12 @@ def get_minimum(message, item):
 def add_item(message, item, qty):
     cursor = db.cursor()
 
+    # Ensure user has username
+    if not message.from_user.username:
+        bot.send_message(message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, message.chat)
+        return
+
     # Validate minimum
     try:
         min = int(message.text)
@@ -225,10 +231,6 @@ def add_item(message, item, qty):
 
     # Update transactions
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-    if not message.from_user.username:
-        bot.send_message(message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
-        send_index(bot, message.chat)
-        return
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (message.chat.id, message.from_user.username, 3, time))
     db.commit()
     trans_id = cursor.lastrowid
@@ -338,6 +340,12 @@ def remove_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     cursor = db.cursor()
 
+    # Ensure user has username
+    if not call.from_user.username:
+        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, call.message.chat)
+        return
+
     # Get stock id
     stock_id = int(call.data.split()[1])
 
@@ -353,10 +361,6 @@ def remove_item(call):
 
     # Update transactions
     time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-    if not call.from_user.username:
-        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
-        send_index(bot, call.message.chat)
-        return
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id, datetime, confirmed) VALUES (?, ?, ?, ?, TRUE)', (call.message.chat.id, call.from_user.username, 4, time))
     db.commit()
     trans_id = cursor.lastrowid
@@ -564,6 +568,12 @@ def open_new_transaction(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     cursor = db.cursor()
 
+    # Ensure user has username
+    if not call.from_user.username:
+        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, call.message.chat)
+        return
+
     # Check for existing transaction
     cursor.execute('SELECT id FROM transactions WHERE store_id = ? AND confirmed = FALSE', (call.message.chat.id,))
     existing_id = cursor.fetchone()
@@ -583,10 +593,6 @@ def open_new_transaction(call):
     type_id=int(call.data.split()[1])
 
     # Add transaction to database
-    if not call.from_user.username:
-        bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
-        send_index(bot, call.message.chat)
-        return
     cursor.execute('INSERT INTO transactions (store_id, operator, type_id) VALUES (?, ?, ?)', (call.message.chat.id, call.from_user.username, type_id,))
     db.commit()
 
@@ -1072,7 +1078,7 @@ def history_day(call):
     # If User wants to view every item
 
         # Get transactions 
-        cursor.execute('SELECT id, datetime FROM transactions WHERE datetime < ? AND datetime > ?', (date + datetime.timedelta(days=1), date - datetime.timedelta(days=1)))
+        cursor.execute('SELECT id, datetime FROM transactions WHERE datetime < ? AND datetime > ? AND store_id = ?', (date + datetime.timedelta(days=1), date - datetime.timedelta(days=1), call.message.chat.id))
         transactions = cursor.fetchall()
         if not transactions:
             bot.send_message(call.message.chat.id, f'No transactions occured on {call.data.split()[2]}')
@@ -1119,7 +1125,7 @@ def history_month(call):
         # User wants to view all items
 
         # Get transactions
-        cursor.execute('SELECT id, datetime FROM transactions WHERE datetime < ? AND datetime > ?', (date + relativedelta(months=+1), date + relativedelta(months=-1)))
+        cursor.execute('SELECT id, datetime FROM transactions WHERE datetime < ? AND datetime > ? AND store_id = ?', (date + relativedelta(months=+1), date + relativedelta(months=-1), call.message.chat.id))
         transactions = cursor.fetchall()
         if not transactions:
             bot.send_message(call.message.chat.id, f'No transactions occured during {month_name[date.month]} {date.year}.')
@@ -1317,11 +1323,13 @@ def request_query_storename(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     cursor = db.cursor()
 
-    # Check for active request
+    # Ensure user has username
     if not call.from_user.username:
         bot.send_message(call.message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
-        send_index(bot, call.message.chat)
+        private_index(bot, call.message.chat)
         return
+    
+    # Check for active request
     cursor.execute('SELECT id FROM request WHERE user = ?', (call.from_user.username,))
     try:
         request_id = cursor.fetchone()[0]
@@ -1332,6 +1340,12 @@ def request_query_storename(call):
         bot.register_next_step_handler(msg, request_query_items)
 
 def request_query_items(message):
+
+    # Ensure user has username
+    if not message.from_user.username:
+        bot.send_message(message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
+        send_index(bot, message.chat)
+        return
 
     # Validate store name
     name = message.text
@@ -1359,10 +1373,6 @@ def request_query_items(message):
         return
     
     # Start new request
-    if not message.from_user.username:
-        bot.send_message(message.chat.id, 'Please add a telegram username to your telegram account use the bot as intended.')
-        send_index(bot, message.chat)
-        return
     cursor.execute('INSERT INTO request (user, store_id) VALUES (?, ?)', (message.from_user.username, store_id))
     db.commit()
     request_id = cursor.lastrowid
@@ -1747,7 +1757,7 @@ def query_storecontact(message):
 
     # Query for contact number
     name = message.text
-    msg = bot.send_message(message.chat.id, '<b>Reply</b> to this message the contact number for this store.', parse_mode='HTML')
+    msg = bot.reply_to(message, '<b>Reply</b> to this message the contact number for this store.', reply_markup=types.ForceReply(True, 'Contact Number'), parse_mode='HTML')
     bot.register_next_step_handler(msg, create_store, name)
 
 def create_store(message, name):

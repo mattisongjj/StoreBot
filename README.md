@@ -188,7 +188,7 @@ The following features are available when the bot is started in a private chat w
     - `request_items` table stores the request id, item id and quantity requested for every item involved in ongoing request. This table does not have a primary key and is used to allow multiple items to be added to the same request.
 
 
-## **How To Run The Bot**
+#### **How To Run The Bot**
 
 1. Ensure you have the latest version of `python` installed
 
