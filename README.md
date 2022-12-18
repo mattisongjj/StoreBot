@@ -14,7 +14,7 @@ Libaries used:
 - Various libaries for storing and manipulating date data.
 
 
-## Video Demo: (https://youtu.be/JYc51R3CC2A)
+## Video Demo: https://youtu.be/JYc51R3CC2A
 
 
 ## Bot Features
