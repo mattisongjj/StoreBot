@@ -1,4 +1,4 @@
-# STOREBOT PROJECT
+# CS50 STOREBOT PROJECT
 
 This project is a telegram bot that is able to keep track of item stocks and transactions as well as connect users to stores for making item request. This bot can be used in any situation where stock taking and transaction tracking is relevant such as at warehouses, retail stores or even keeping track of items in your own storage room at home.
 
@@ -143,18 +143,24 @@ The following features are available when the bot is started in a private chat w
 - **bot.py**
 
     - Imports:
+
+        - Imports `os` from the [python standard library](https://docs.python.org/3/library/)
+
+        - Imports `load_dotenv` function the [python-dotenv library](https://pypi.org/project/python-dotenv/)
         
-        - Imports `telebot` class from [pyTelegramBotAPI library](https://pypi.org/project/pyTelegramBotAPI/)
+        - Imports `telebot` class from the [pyTelegramBotAPI library](https://pypi.org/project/pyTelegramBotAPI/)
 
         - Imports `sqlite3`, `datetime`, `calendar` and `time` from the [python standard library](https://docs.python.org/3/library/)
 
-        - Imports `relativedelta` class from [python-dateutil library](https://dateutil.readthedocs.io/en/latest/)
+        - Imports `relativedelta` class from the [python-dateutil library](https://dateutil.readthedocs.io/en/latest/)
 
         - Imports `functions.py`
 
     - Functions/class instances:
 
-        - Creates instance of `telebot` class from `pyTelegramBotAPI` for establishing connection to the telegram API.
+        - Loads `API_KEY` from environmental variables using functions from `os` and `python-dotenv` library.
+
+        - Creates instance of `telebot` class from `pyTelegramBotAPI` for establishing connection to the telegram API, using `API_KEY`.
 
         - Connects to local database (`stores.db`) using the Connection class from sqlite3 library.
 
@@ -196,13 +202,16 @@ The following features are available when the bot is started in a private chat w
 
     1. [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI/)
     2. [python-dateutil](https://dateutil.readthedocs.io/en/latest/)
+    3. [python-dotenv](https://pypi.org/project/python-dotenv/)
 
 3. Clone this repository using `git clone git@github.com:mattisongjj/project.git` at the command line
 
+4. Generate an authentication token for a bot on telegram by following this [guide](https://core.telegram.org/bots/features#botfather)
+
+5. Set `API_KEY` variable to the authentication token generated from step 4.
+
 4. Run the bot by running the command `python bot.py`
 
-5. Open [Telegram](https://telegram.org/) and search for the bot. (Username: `@automatedstore_bot`)
+5. Open [Telegram](https://telegram.org/) and search for the bot.
 
 6. Start using the bot by starting it in a private chat or group chat!
-
-

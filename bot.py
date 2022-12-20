@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 import telebot
 from telebot.util import quick_markup
 from telebot import types
@@ -11,7 +13,8 @@ from time import sleep
 
 
 # Set API key
-API_KEY = '5691173475:AAGF7nfwSMKzd4UyPpveJ2OYuu6PGSTJzLs'
+load_dotenv()
+API_KEY = os.getenv('API_KEY')
 bot = telebot.TeleBot(API_KEY, parse_mode=None)
 
 # Connect to database
@@ -1190,7 +1193,7 @@ def change_contact(call):
     bot.delete_message(call.message.chat.id, call.message.id)
 
     # Query for new contact number
-    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the new contact number for this store.')
+    msg = bot.send_message(call.message.chat.id, '<b>Reply</b> to this message the new contact number for this store.', parse_mode='HTML')
     bot.register_next_step_handler(msg, update_contact)
 
 def update_contact(message):
