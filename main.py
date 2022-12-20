@@ -762,7 +762,7 @@ def show_remove_item(call):
     # Create markup
     markup = {}
     for item in items:
-        markup[f'{item[1]}'] = {'callback_data': f'(remove_item) {trans_id} {item[0]}'}
+        markup[f'{item[1]}'] = {'callback_data': f'(remove_item_trans) {trans_id} {item[0]}'}
     
     # Add back option
     markup['Back'] = {'callback_data': f'(back_trans) {trans_id}'}
@@ -772,7 +772,7 @@ def show_remove_item(call):
     
 
 # Removes item from transaction
-@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item)')
+@bot.callback_query_handler(func=lambda call: call.data.split()[0] == '(remove_item_trans)')
 def remove_item(call):
     bot.delete_message(call.message.chat.id, call.message.id)
     cursor = db.cursor()
