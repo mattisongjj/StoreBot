@@ -136,7 +136,7 @@ The following features are available when the bot is started in a private chat w
 
 ## **Files**
 
-- **bot.py**
+- **main.py**
 
     - Imports:
 
@@ -206,8 +206,11 @@ The following features are available when the bot is started in a private chat w
 
 5. Set `API_KEY` variable to the authentication token generated from step 4.
 
-4. Run the bot by running the command `python bot.py`
+4. Run the bot by running the command `python3 main.py`
 
 5. Open [Telegram](https://telegram.org/) and search for the bot.
 
 6. Start using the bot by starting it in a private chat or group chat!
+
+
+An instance of the bot hosted by me can be found using the Telegram username, `@automatedstore_bot`. Feel free to skip the steps above and use this bot for your own purposes!
