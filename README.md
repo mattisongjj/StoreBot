@@ -13,7 +13,7 @@ Libaries used:
 - sqlite3
 - Various libaries for storing and manipulating date data.
 
-## Video Demo: [https://www.youtube.com/watch?v=JYc51R3CC2A&ab_channel=Mattis]
+## Video Demo: https://youtu.be/JYc51R3CC2A
 
 ## Bot Features
 
