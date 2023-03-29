@@ -21,6 +21,8 @@ To start the bot and access its features, use the /start command. (Ensure that y
 
 Once the /start command is run, the bot will reply with an 'inline keyboard', which are options to click on, which will allow you to access the bot.
 
+![Store options](images/storeoptions.jpg)
+
 
 #### **Group Chat Features**
 
@@ -36,11 +38,15 @@ The following features are available when the bot is started in a group chat.
         2. Run /create_store command (Ensure that you are an administrator for the group chat)
         3. Follow the instructions given by the bot
 
+        ![Store Creation](images/storecreate.jpg)
+
     - Once store has been created, you can start tracking items and transactions for your store, as well as getting item request from other telegram users by sharing your store name.
 
 - **Managing Items**
 
     - The 'Manage Items' option allows you to do three things:
+
+        ![Manage Items Options](images/itemoptions.jpg)
 
         1. Add items and their minimum quantities, to your store.
 
@@ -48,46 +54,72 @@ The following features are available when the bot is started in a group chat.
             - The bot also gives you an option to add the minimum requirement of the item you are adding in your store.
             - Should you add a minimum requirement to an item, you will be notified whenever its quantity falls below its minimum requirement.
 
+            ![Item Adding](images/itemadding.jpg)
+
         2. Rename items currently in your store
 
             - To rename an item in your store press the rename item option, select an item to rename and follow the instructions given by the bot.
             - Note that renaming an item in your store changes the name of that item in all past transactions as well.
+
+            ![Item Renaming](images/itemrenaming.jpg)
 
         3. Remove items from your store.
 
             - To remove an item from your store press the remove item option and select an item to remove.
             - Note that once an item has been removed from your store its stock will no longer be tracked and will be deleted from your current stock, but any past transactions involving that item will not be deleted.
 
+            ![Item Removing](images/itemremoving.jpg)
+
 - **Viewing/Checking Stock**
 
     - The 'View Current Stock' option allows you to view the quantities of items in your stock and check if any items are below their minimum requirement.
 
+    ![Manage Items Options](images/stockoptions.jpg)
+
     - To view the full stock of items in your store, select the 'View Full Stock' option.
+
+    ![Full Stock Example](images/fullstock.jpg)
 
     - To view the stock of a specific item in your store, select the name of the item which you want to view.
 
     - To check if any items in your store is below minimum requirement, select the 'Check Minimum Requirement' option. This option shows you which items (if any) in your store are currently below minimum requirement and the respective quantities to 'top-up'.
+
+    ![Minimum Requirement Example](images/minimumrequirement.jpg)
 
 
 - **Adding Transactions**
 
     - The 'New Transaction' option allows you to add new item transactions to your store.
 
-    - To start a new transaction, select one of the transaction types shown. By default your store will only have two transaction types, 'Issue' and 'Loan', to add new transaction types, select the 'Add New Transaction Type' option.
+    - You are able to add, rename and remove, as many transaction types from your store, similar to item managing.
 
-    - You are able to add, rename and remove, as many transaction types from your store.
+    - To start a new transaction, select one of the transaction types shown. By default your store will only have two transaction types, 'Issue' and 'Loan', to add new transaction types, use the 'Add New Transaction Type' option.
+
+    ![Transaction Options](images/transactionoptions.jpg)
 
     - Once you have selected a transaction type, a new transaction is started and the bot will reply with the following options for you to edit your transaction:
 
+        ![Transaction Options after type](images/transactionoptions2.jpg)
+
         1. The 'Select Items' option prompts you for an item to add to your transaction. When selected, the option will first prompt you for an item, followed by if the item's quantity is increased or decreased for the transaction, and lastly the quantity of item involved in the transaction. After which the item will be added to your transaction.
+            
+            - ![Select Items](images/selectitems.jpg)
+            - ![Increase Decrease](images/increasedecrease.jpg)
+            - ![Quantity Selected](images/selectquantity.jpg)
+
 
         2. The 'Remove Items' option will prompt you for an item to remove from your transaction.
 
         3. The 'Add/Change Customer' option adds or changes the name of the customer for your transaction, if applicable.
 
+            - ![Customer Adding](images/customeradding.jpg)
+
         4. The 'Remove Customer' option removes the current customer for your transaction.
 
         5. The 'Confirm Transaction' option will confirm the transaction, after which the transaction is recorded and item quantities in your stock ajusted accordingly.
+
+            - ![Confirm Transaction](images/transactionconfirm.jpg)
+            - ![Confirmed Transaction](images/confirmedtransaction.jpg)
 
         6. The 'Cancel Transaction' option will cancel the transaction.
 
@@ -100,14 +132,27 @@ The following features are available when the bot is started in a group chat.
 
     - When this option is selected the bot will prompt you for a day or month.
 
+    ![Day or month prompt](images/daymonthhistory.jpg)
+
     - Once you have inputed a day or month, you will then be able to choose to view all items or one specific item for transaction history viewing during that day/month.
+
+    ![Month input](images/month.jpg)
 
     - Once you have selected an item, the bot will then show you all transactions involving that item during the day/month, by sending one text message containing transaction information per transaction. (This process could take a long time depending on how many transactions there are.)
 
+    ![Transaction History Example](images/transactionhistory.jpg)
+
+- **Edit Store Details**
+
+    - The 'Edit' Store Details' option allows you to change the contact number of the store and the name of the store
+
+    ![Store Details Option](images/storedetails.jpg)
 
 #### **Private Chat Features**
 
 The following features are available when the bot is started in a private chat with the bot.
+
+![Private Chat Options](images/privateoptions.jpg)
 
 - **Send item request to stores**
 
@@ -115,15 +160,27 @@ The following features are available when the bot is started in a private chat w
 
     - When selected the bot will first prompt you for the name of the store you would like to request items from.
 
+    ![Private Request](images/requestfromstore.jpg)
+
     - If you replied the bot with a valid store name, a new request is started and the bot will reply with the following options to edit your request:
 
         1. The 'Select Items' option will prompt you to select an item from the store which you would like to add to the request. Once you have selected an item it will prompt you for the quantity of that item you would like to request, after which the item and its requested quantity is added to the request.
+
+            - ![Select Item](images/selectitemtorequest.jpg)
+            - ![Quantity Request](images/quantityrequest.jpg)
 
         2. The 'Remove Items' option will prompt you for an item to remove from your request
 
         3. The 'Change/Remove Remarks' option will allow you to add, change or remove any additonal remarks for your request.
 
+            - ![Change or remove remarks](images/removeoraddremarks.jpg)
+            - ![Added remarks](images/addremark.jpg)
+
         4. The 'Confirm Request' option will confirm the request, after which the store will be notified of your request, and the bot will give you the contact number of the store, allowing you to get in touch with the store.
+
+            - ![Confirm Request Prompt](images/confirmrequest.jpg)
+            - ![Priavte Chat Request](images/privaterequest.jpg)
+            - ![Group Chat Request](images/grouprequest.jpg)
 
         5. The 'Cancel Request' option will cancel the current request
 
@@ -134,6 +191,8 @@ The following features are available when the bot is started in a private chat w
     - The 'Contact Store' option will prompt you for the name of the store you would like to contact.
 
     - If you replied the bot with a valid store name, the bot will reply you with the contact number of the store.
+
+    ![Store Contact Example](images/storecontact.jpg)
 
 
 ## **Files**
