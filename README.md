@@ -272,6 +272,3 @@ The following features are available when the bot is started in a private chat w
 5. Open [Telegram](https://telegram.org/) and search for the bot.
 
 6. Start using the bot by starting it in a private chat or group chat!
-
-
-An instance of the bot hosted by me can be found using the Telegram username, `@automatedstore_bot`. Feel free to skip the steps above and use this bot for your own purposes!
