@@ -1,1 +1,2 @@
+# We store the API_KEY as an environmental variable in a .env file
 .env
