@@ -13,8 +13,6 @@ Libaries used:
 - sqlite3
 - Various libaries for storing and manipulating date data.
 
-## Video Demo: https://youtu.be/JYc51R3CC2A
-
 ## Bot Features
 
 To start the bot and access its features, use the /start command. (Ensure that you have a telegram user name before using the bot.)
